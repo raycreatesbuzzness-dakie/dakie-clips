@@ -1,0 +1,4 @@
+#!/bin/sh
+# dakie: Dakie Clips command-line tools (runs inside its private Python environment)
+SCRIPTS="$(dirname "$(realpath "$0")")"
+PYTHONPATH="$SCRIPTS${PYTHONPATH:+:$PYTHONPATH}" exec "$HOME/.dakie_clips/venv/bin/python" -m dakie "$@"
