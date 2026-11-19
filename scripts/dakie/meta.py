@@ -30,6 +30,73 @@ def _tags_ok(tags):
     return [t for t in tags if not re.fullmatch(r"#[A-Za-z0-9_]+", t)]
 
 
+GENERIC_TAGS = {"gta6", "gtavi", "gta", "gta5", "gaming", "gamer", "games", "videogames", "shorts", "youtubeshorts",
+                "fyp", "foryou", "foryoupage", "viral", "trending", "reels", "reel", "gamingreels", "gamingclips",
+                "clips", "funny", "explore", "streamer", "twitch", "kick", "youtube"}
+
+
+def keyword_suggestions(phrase: str, limit: int = 12) -> list[str]:
+    """What people actually type into YouTube search for this phrase (public autocomplete)."""
+    import json as _json
+    import urllib.parse
+    import urllib.request
+    url = ("https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&hl=en&q="
+           + urllib.parse.quote(phrase))
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (dakie-clips keyword research)"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return _json.loads(r.read().decode("utf-8", "replace"))[1][:limit]
+    except Exception as e:  # research is best-effort
+        return [f"(no suggestions: {type(e).__name__})"]
+
+
+def _tag_tokens(tag: str) -> list[str]:
+    body = tag.lstrip("#")
+    parts = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", body)
+    return [p.lower() for p in parts if len(p) > 1 or p.isdigit()]
+
+
+def hashtag_checks(proj: Path, n: int, meta: dict) -> list[str]:
+    """Hashtags must be about THIS clip: unique vs. other clips, and grounded in what is said/shown."""
+    w = []
+    words_f = clip_dir(proj, n) / "words.json"
+    said = " ".join(x["word"] for x in read_json(words_f)["words"]).lower() if words_f.exists() else ""
+    said += " " + " ".join(str(v) for v in (meta.get("youtube", {}).get("title", ""),
+                                             " ".join(meta.get("seo", {}).get("secondary_keywords", []))))
+    info_f = proj / "info.json"
+    if info_f.exists():
+        inf = read_json(info_f)
+        said += " " + " ".join(str(inf.get(k) or "") for k in ("uploader", "channel"))
+    said = said.lower()
+    others = {}
+    for d in sorted((proj / "clips").glob("clip_*")):
+        k = int(d.name.split("_")[1])
+        if k != n and (d / "meta.json").exists():
+            others[k] = read_json(d / "meta.json")
+    for plat in ("youtube", "tiktok", "instagram", "facebook"):
+        tags = [t.lower() for t in meta.get(plat, {}).get("hashtags", [])]
+        if not tags:
+            continue
+        other_tags = {t.lower() for o in others.values() for t in o.get(plat, {}).get("hashtags", [])}
+        for k, o in others.items():
+            if sorted(t.lower() for t in o.get(plat, {}).get("hashtags", [])) == sorted(tags):
+                w.append(f"{plat}: hashtags are identical to clip {k}; make them about this clip's moment")
+        unique = [t for t in tags if t not in other_tags and t.lstrip("#") not in GENERIC_TAGS]
+        if others and len(unique) < 2:
+            w.append(f"{plat}: only {len(unique)} hashtag(s) unique to this clip (need 2+ about this moment)")
+        raw = meta.get(plat, {}).get("hashtags", [])
+        specific = [t for t in raw if t.lstrip("#").lower() not in GENERIC_TAGS]
+        squashed = re.sub(r"[^a-z0-9]", "", said)
+        grounded = [t for t in specific
+                    if t.lstrip("#").lower().replace("gta6", "") and (
+                        t.lstrip("#").lower().replace("gta6", "") in squashed
+                        or any(tok in said for tok in _tag_tokens(t) if tok not in ("gta", "6", "vi")))]
+        if len(grounded) < 2:
+            w.append(f"{plat}: only {len(grounded)} hashtag(s) match what happens in the clip "
+                     f"({', '.join(specific) or 'none'}); use characters, places, actions or quotes from it")
+    return w
+
+
 def validate(meta: dict, info: dict) -> list[str]:
     w = []
     credit_keys = [k for k in (info.get("uploader"), info.get("channel"), info.get("source_url")) if k]
@@ -109,7 +176,7 @@ def package(proj: Path, n: int) -> Path:
     meta = read_json(d / "meta.json")
     rend = read_json(d / "render.json")
     prep = read_json(d / "prep.json")
-    warns = validate(meta, info)
+    warns = validate(meta, info) + hashtag_checks(proj, n, meta)
 
     lines = [f"# Clip {n:02d}: copyright checklist", ""]
     lvl = rights["level"]

@@ -1,23 +1,26 @@
 # Dakie Clips
 
 A [Claude Code](https://claude.com/claude-code) skill that turns a GTA 6 livestream (YouTube,
-Twitch, Kick and other sites [yt-dlp](https://github.com/yt-dlp/yt-dlp) supports) into five
-3-minute vertical clips for YouTube Shorts, TikTok, Instagram Reels and Facebook Reels.
+Twitch, Kick and other sites [yt-dlp](https://github.com/yt-dlp/yt-dlp) supports) into ten
+50–60 second vertical clips for YouTube Shorts, TikTok, Instagram Reels and Facebook Reels.
 
 ```
 dakie_clips https://www.youtube.com/watch?v=...
 ```
 
-Claude checks the stream's reuse rights, finds and ranks the 10 best moments, **waits for you to
-approve 5**, then edits them and writes the titles, descriptions and hashtags for each platform.
+Claude checks the stream's reuse rights, finds and ranks the 20 best moments of the whole stream,
+**waits for you to pick your top 10**, then edits them and writes clip-specific titles, descriptions
+and hashtags for each platform.
 
 ## What the videos look like
-- **Top 45%:** hydraulic press footage (an original generated loop, or licensed clips you add)
+- **Top 45%:** hydraulic press footage, a **different video for every clip** (licensed clips you add,
+  or original generated loops in 8 color themes)
 - **Bottom 55%:** the gameplay, with the streamer's webcam tracked and placed bottom-right
 - **Title** in a white rounded box for the whole video, e.g. "Speed meets his workmates at GTA 6!! Damn!"
-- **Word-by-word captions** on the seam between the panels, with the spoken word in yellow
-- A 2–3 s cold-open teaser of the payoff, zoom punch-ins, sound effects, audio leveled to −14 LUFS
-- Exactly 3:00, 1080×1920, 30 fps
+- **Word-by-word captions** on the seam between the panels, in multiple colors: the spoken word
+  rotates yellow → cyan → pink → orange, key story words are coral red, numbers and money lime green
+- A short cold-open teaser of the payoff, zoom punch-ins, sound effects, audio leveled to −14 LUFS
+- 50–60 seconds (default 58), 1080×1920, 30 fps
 
 ## How it works
 1. **Rights check** (`dakie init`): license, members-only/live status, "no clipping" or
@@ -26,11 +29,13 @@ approve 5**, then edits them and writes the titles, descriptions and hashtags fo
    a transcript (platform captions, or local Whisper).
 3. **Rank** (`dakie candidates`): scores every moment from chat spikes ("CLIP IT", KEKW, LMAO),
    comment timestamps, volume spikes and excited speech. Claude reads the transcript and picks the
-   top 10, then **stops for your approval of 5**.
+   top 20, then **stops for you to choose 10**.
 4. **Edit** (`dakie prepare` / `dakie render`): downloads only the approved sections, transcribes
    word-by-word, finds and tracks the webcam, and renders with ffmpeg.
 5. **Package** (`dakie package`): validates the metadata for each platform (lengths, hashtags,
-   streamer credit, risky wording) and writes a copyright checklist per clip.
+   streamer credit, risky wording, hashtags unique to each clip and matching what happens in it)
+   and writes a copyright checklist per clip. `dakie keywords` shows live YouTube search
+   suggestions for hashtag and title research.
 
 ## Install (macOS)
 **You need:** a Mac (tested on Apple Silicon; Windows and Linux are not supported),
@@ -96,23 +101,49 @@ press-footage libraries in `~/DakieClips/`. It links the `dakie` command to `~/.
 | `dakie prepare <project> <n> <start> <end>` | download a clip section, captions, face tracking |
 | `dakie render <project> <n>` | render `clips/clip_NN/plan.json` → `final.mp4` |
 | `dakie package <project> <n>` | validate metadata, copyright checklist, copy to `final/` |
-| `dakie sfx list \| add \| suggest` | manage the sound-effects library |
-| `dakie press list \| add \| generate` | manage the hydraulic press footage |
+| `dakie keywords "<phrase>" [...]` | live YouTube search suggestions for titles and hashtags |
+| `dakie sfx list \| add \| tag \| remove \| suggest` | manage the sound-effects library |
+| `dakie press list \| add \| generate \| enable \| disable \| priority \| remove` | manage the hydraulic press footage |
 
-Layout, fonts, colors, clip length and Whisper models are set in `~/DakieClips/config.json`.
+Layout, fonts, caption color palette, clip length range and Whisper models are set in
+`~/DakieClips/config.json`.
 
 ## Adding your own media
-Sound effects and press clips **require a license** when you add them, so every video's copyright
-checklist can list where each element came from:
+Both libraries take single files, several files, or whole folders, and everything you add is
+available to the next edit. A license is required for every item, so each video's copyright
+checklist can list where each element came from.
+
+**Hydraulic press videos** (top panel; every clip in a project automatically gets a different one):
 
 ```bash
-dakie sfx add boom.wav --name big_boom --tags "impact,crash" --license "CC0" --source https://...
-dakie press add press.mp4 --license "Pexels License" --source https://www.pexels.com/video/...
+dakie press add ~/Downloads/press1.mp4 ~/Downloads/press2.mp4 --license "Pexels License" --source https://www.pexels.com/video/...
+dakie press add ~/Downloads/press_folder --license "Pixabay Content License"
+dakie press generate --count 3       # 3 more original animated loops you own
+dakie press list                     # what's there, on/off, priority, license
+dakie press priority <file> --priority 10   # pick this one first (real footage defaults to 8, generated 5)
+dakie press disable <file>           # keep it but stop using it (enable to undo)
+dakie press remove <file>
 ```
+
+Videos are converted to 1080p, 30 fps, without audio when added. You need at least as many enabled
+press videos as clips you edit per stream (10); the installer creates 8 generated loops to start.
+
+**Sound effects:**
+
+```bash
+dakie sfx add ~/Downloads/boom.mp3 --tags "impact,explosion" --license CC0 --category impact
+dakie sfx add ~/Downloads/sfx_pack --license "Pixabay Content License" --category custom
+dakie sfx list
+dakie sfx tag big_boom --tags "impact,crash,explosion"
+dakie sfx remove big_boom
+```
+
+Sounds are converted to 48 kHz WAV with leading silence trimmed and the peak normalized. Without
+`--tags`, the words in the file name become the tags. Claude reads the tags to pick fitting sounds.
 
 Good free sources: [Pexels](https://www.pexels.com/search/videos/hydraulic%20press/) and
 [Pixabay](https://pixabay.com) for footage, [freesound.org](https://freesound.org) (CC0 filter) and
-Pixabay for sounds. The 13 starter sound effects and the press animation are generated by the tool
+Pixabay for sounds. The 13 starter sound effects and the generated press loops are made by the tool
 itself, so you own them.
 
 ## Copyright: read this

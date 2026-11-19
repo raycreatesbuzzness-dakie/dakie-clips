@@ -10,8 +10,16 @@
   dakie words <project> <n>           print the clip's timed transcript (for writing the plan)
   dakie render <project> <n>          render clips/clip_NN/plan.json -> final.mp4
   dakie package <project> <n>         validate meta.json, copyright checklist, copy to final/
-  dakie sfx list|add|suggest          manage the sound-effects library
-  dakie press list|add                manage hydraulic press footage
+  dakie keywords <phrase> [...]       YouTube search suggestions for hashtag/SEO research
+  dakie sfx list|add|remove|tag|suggest|rebuild     manage the sound-effects library
+  dakie press list|add|remove|enable|disable|priority|generate   manage hydraulic press footage
+
+Library examples:
+  dakie press add ~/Downloads/press1.mp4 ~/Downloads/press2.mp4 --license "Pexels License" --source <url>
+  dakie press add ~/Downloads/press_folder --license "Pixabay Content License"
+  dakie press generate --count 3          (3 more original loops you own)
+  dakie sfx add ~/Downloads/boom.mp3 --tags "impact,explosion" --license CC0 --category impact
+  dakie sfx add ~/Downloads/sfx_pack --license "Pixabay Content License" --category custom
 """
 from __future__ import annotations
 
@@ -29,7 +37,7 @@ def main(argv=None):
     sub.add_parser("doctor")
     p = sub.add_parser("init"); p.add_argument("url")
     p = sub.add_parser("scan"); p.add_argument("project")
-    p = sub.add_parser("candidates"); p.add_argument("project"); p.add_argument("--top", type=int, default=25)
+    p = sub.add_parser("candidates"); p.add_argument("project"); p.add_argument("--top", type=int, default=40)
     p.add_argument("--chat-delay", type=float, default=8.0)
     p = sub.add_parser("text"); p.add_argument("project"); p.add_argument("start"); p.add_argument("end")
     p.add_argument("--compact", type=int, default=0)
@@ -38,13 +46,16 @@ def main(argv=None):
     p = sub.add_parser("words"); p.add_argument("project"); p.add_argument("n", type=int)
     p = sub.add_parser("render"); p.add_argument("project"); p.add_argument("n", type=int)
     p = sub.add_parser("package"); p.add_argument("project"); p.add_argument("n", type=int)
-    p = sub.add_parser("sfx"); p.add_argument("action", choices=["list", "add", "suggest", "rebuild"])
+    p = sub.add_parser("keywords"); p.add_argument("phrases", nargs="+")
+    p = sub.add_parser("sfx"); p.add_argument("action", choices=["list", "add", "remove", "tag", "suggest", "rebuild"])
     p.add_argument("args", nargs="*")
     p.add_argument("--name"); p.add_argument("--tags", default=""); p.add_argument("--license")
     p.add_argument("--source", default=""); p.add_argument("--category", default="custom")
-    p = sub.add_parser("press"); p.add_argument("action", choices=["list", "add", "generate"])
+    p = sub.add_parser("press")
+    p.add_argument("action", choices=["list", "add", "remove", "enable", "disable", "priority", "generate"])
     p.add_argument("args", nargs="*"); p.add_argument("--license"); p.add_argument("--source", default="")
-    p.add_argument("--seed", type=int, default=2)
+    p.add_argument("--name"); p.add_argument("--priority", type=int, default=8)
+    p.add_argument("--seed", type=int); p.add_argument("--count", type=int, default=1)
     a = ap.parse_args(argv)
 
     if a.cmd == "setup":
@@ -55,7 +66,7 @@ def main(argv=None):
         press.init_library()
         print(f"Config: {CONFIG_PATH}\nHome:   {HOME}")
     elif a.cmd == "doctor":
-        import shutil, subprocess
+        import subprocess
         from .common import venv_bin
         print("ffmpeg :", ffmpeg())
         print("yt-dlp :", subprocess.run([venv_bin("yt-dlp"), "--version"], capture_output=True, text=True).stdout.strip())
@@ -92,17 +103,35 @@ def main(argv=None):
     elif a.cmd == "package":
         from .meta import package
         package(project_dir(a.project), a.n)
+    elif a.cmd == "keywords":
+        from .meta import keyword_suggestions
+        for ph in a.phrases:
+            print(f"{ph}:")
+            for k in keyword_suggestions(ph):
+                print(f"  {k}")
     elif a.cmd == "sfx":
         from . import sfx
         if a.action == "list":
-            for e in sfx.library():
-                print(f"{e['name']:16} {e['category']:11} {', '.join(e['tags'])}  [{e['license'][:40]}]")
+            lib = sfx.library()
+            for e in lib:
+                print(f"{e['name']:18} {e['category']:11} {', '.join(e['tags'])}  [{e['license'][:40]}]")
+            print(f"\n{len(lib)} sounds in {len({e['category'] for e in lib})} categories")
         elif a.action == "rebuild":
             sfx.init_library(force=True)
         elif a.action == "add":
-            if not a.args or not a.name:
-                sys.exit("usage: dakie sfx add <file> --name NAME --tags a,b --license LICENSE [--source URL] [--category C]")
-            sfx.add(a.args[0], a.name, [t.strip() for t in a.tags.split(",") if t.strip()], a.license, a.source, a.category)
+            if not a.args or not a.license:
+                sys.exit("usage: dakie sfx add <file|folder> [...] --license LICENSE [--tags a,b] [--category C] "
+                         "[--name NAME] [--source URL]")
+            sfx.add(a.args, [t.strip() for t in a.tags.split(",") if t.strip()], a.license, a.source,
+                    a.category, a.name)
+        elif a.action == "remove":
+            if not a.args:
+                sys.exit("usage: dakie sfx remove <name>")
+            sfx.remove(a.args[0])
+        elif a.action == "tag":
+            if not a.args or not a.tags:
+                sys.exit("usage: dakie sfx tag <name> --tags a,b,c")
+            sfx.retag(a.args[0], [t.strip() for t in a.tags.split(",") if t.strip()])
         elif a.action == "suggest":
             from .clip import clip_dir
             from .common import read_json
@@ -112,21 +141,44 @@ def main(argv=None):
         from . import press
         from .common import PRESS_DIR
         if a.action == "list":
-            for e in press.library():
-                print(f"{e['file']:32} {'on ' if e.get('enabled', True) else 'off'} [{e['license']}]")
+            lib = press.library()
+            for e in lib:
+                print(f"{e['file']:40} {'on ' if e['enabled'] else 'off'} p{e['priority']:<2} [{e['license'][:60]}]")
+            on = sum(1 for e in lib if e["enabled"])
+            print(f"\n{on} enabled press videos: up to {on} clips per project can each get a different one.")
         elif a.action == "add":
+            if not a.args or not a.license:
+                sys.exit("usage: dakie press add <file|folder> [...] --license LICENSE [--source URL] "
+                         "[--priority 1-10] [--name NAME]")
+            press.add(a.args, a.license, a.source, a.priority, a.name)
+        elif a.action in ("remove", "enable", "disable", "priority"):
             if not a.args:
-                sys.exit("usage: dakie press add <file.mp4> --license LICENSE [--source URL]")
-            press.add(a.args[0], a.license, a.source)
+                sys.exit(f"usage: dakie press {a.action} <file>" + (" --priority N" if a.action == "priority" else ""))
+            if a.action == "remove":
+                press.remove(a.args[0])
+            else:
+                press.set_entry(a.args[0], enabled={"enable": True, "disable": False}.get(a.action),
+                                priority=a.priority if a.action == "priority" else None)
         elif a.action == "generate":
-            from .common import read_json, write_json
-            out = PRESS_DIR / f"generated_press_{a.seed:02d}.mp4"
-            press.generate(out, seed=a.seed)
-            lib = [e for e in press.library() if e["file"] != out.name]
-            lib.append({"file": out.name, "license": "Original: generated by Dakie Clips (you own it)",
-                        "source": "dakie press generator", "enabled": True})
-            write_json(press.LIB, lib)
-            print(f"Added {out}")
+
+            lib = press.library()
+            taken = {int(e["file"][16:18]) for e in lib if e["file"].startswith("generated_press_")}
+            seeds = [a.seed] if a.seed else []
+            k = 1
+            while len(seeds) < a.count:
+                if k not in taken and k not in seeds:
+                    seeds.append(k)
+                k += 1
+            for seed in seeds:
+                out = PRESS_DIR / f"generated_press_{seed:02d}.mp4"
+                theme = press.THEMES[(seed - 1) % len(press.THEMES)]["name"]
+                print(f"Rendering original press loop {seed} ({theme})...")
+                press.generate(out, seed=seed)
+                lib = [e for e in lib if e["file"] != out.name]
+                lib.append({"file": out.name, "license": press.ORIGINAL, "source": "dakie press generator",
+                            "enabled": True, "priority": 5})
+            press.save(lib)
+            print(f"Added {len(seeds)} loop(s).")
 
 
 if __name__ == "__main__":

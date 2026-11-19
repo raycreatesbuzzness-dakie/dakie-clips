@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-import shutil
 import wave
 from pathlib import Path
 
@@ -142,19 +141,83 @@ def init_library(force=False):
     print(f"SFX library: {len(lib)} sounds in {SFX_DIR}")
 
 
-def add(src: str, name: str, tags: list[str], license_: str, source: str, category: str = "custom"):
+AUDIO_EXT = {".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac", ".aif", ".aiff", ".opus"}
+
+
+def add(paths, tags: list[str], license_: str, source: str = "", category: str = "custom",
+        name: str | None = None):
+    """Add one or more sounds (or folders of sounds). Each is converted to 48 kHz stereo WAV,
+    leading silence trimmed, peak-normalised, so every sound in the library mixes the same way."""
+    import subprocess
+    from .common import ffmpeg, media_duration
     if not license_ or license_.lower() in ("unknown", "?"):
         raise SystemExit("A license is required (e.g. 'CC0', 'Pixabay Content License', 'Purchased - Epidemic Sound'). "
                          "Sounds without a known license can get your videos muted or claimed.")
-    p = Path(src).expanduser()
-    dest = SFX_DIR / category / f"{re.sub(r'[^a-z0-9_]+', '_', name.lower())}{p.suffix.lower()}"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(p, dest)
-    lib = [e for e in library() if e["name"] != name]
-    lib.append({"name": name, "file": str(dest.relative_to(SFX_DIR)), "category": category, "tags": tags,
-                "license": license_, "source": source, "default_gain_db": None})
-    write_json(LIB, sorted(lib, key=lambda e: (e["category"], e["name"])))
-    print(f"Added {name} -> {dest}")
+    files = []
+    for raw in paths:
+        p = Path(raw).expanduser()
+        if p.is_dir():
+            files += sorted(f for f in p.iterdir() if f.suffix.lower() in AUDIO_EXT)
+        elif p.is_file():
+            files.append(p)
+        else:
+            raise SystemExit(f"Not found: {p}")
+    if not files:
+        raise SystemExit("No audio files found.")
+    if name and len(files) > 1:
+        raise SystemExit("--name only works when adding a single file.")
+    lib = {e["name"]: e for e in library()}
+    for f in files:
+        nm = re.sub(r"[^a-z0-9_]+", "_", (name or f.stem).lower()).strip("_")
+        dest = SFX_DIR / category / f"{nm}.wav"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        r = subprocess.run([ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", "-i", str(f), "-vn",
+                            "-af", "silenceremove=start_periods=1:start_threshold=-50dB,afade=t=out:st=14:d=1",
+                            "-t", "15", "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", str(dest)],
+                           capture_output=True, text=True)
+        if r.returncode or not dest.exists() or media_duration(dest) < 0.05:
+            print(f"Skipped {f.name}: not a readable audio file")
+            dest.unlink(missing_ok=True)
+            continue
+        _peak_normalize(dest)
+        file_tags = tags or [w for w in re.split(r"[^a-z0-9]+", f.stem.lower()) if len(w) > 2]
+        lib[nm] = {"name": nm, "file": str(dest.relative_to(SFX_DIR)), "category": category, "tags": file_tags,
+                   "license": license_, "source": source or str(f), "default_gain_db": None}
+        print(f"Added {nm} [{category}] tags: {', '.join(file_tags)}")
+    write_json(LIB, sorted(lib.values(), key=lambda e: (e["category"], e["name"])))
+    print(f"SFX library now has {len(lib)} sounds.")
+
+
+def _peak_normalize(path: Path, peak: float = 0.89):
+    with wave.open(str(path)) as w:
+        params, raw = w.getparams(), w.readframes(w.getnframes())
+    a = np.frombuffer(raw, dtype=np.int16).astype(np.float32)
+    m = np.abs(a).max()
+    if m > 0:
+        a = np.clip(a / m * peak * 32767, -32768, 32767)
+    with wave.open(str(path), "wb") as w:
+        w.setparams(params)
+        w.writeframes(a.astype(np.int16).tobytes())
+
+
+def remove(name: str):
+    lib = library()
+    hit = [e for e in lib if e["name"] == name]
+    if not hit:
+        raise SystemExit(f"Unknown sound '{name}'. Run: dakie sfx list")
+    (SFX_DIR / hit[0]["file"]).unlink(missing_ok=True)
+    write_json(LIB, [e for e in lib if e["name"] != name])
+    print(f"Removed {name}")
+
+
+def retag(name: str, tags: list[str]):
+    lib = library()
+    hit = [e for e in lib if e["name"] == name]
+    if not hit:
+        raise SystemExit(f"Unknown sound '{name}'. Run: dakie sfx list")
+    hit[0]["tags"] = tags
+    write_json(LIB, lib)
+    print(f"{name}: tags {', '.join(tags)}")
 
 
 def path_of(name: str) -> Path:

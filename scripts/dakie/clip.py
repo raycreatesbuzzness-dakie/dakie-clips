@@ -25,9 +25,10 @@ def prepare(proj: Path, n: int, start: float, end: float) -> dict:
     info = read_json(proj / "info.json")
     d = clip_dir(proj, n)
     d.mkdir(parents=True, exist_ok=True)
-    if end - start < cfg["target_duration"]:
-        end = start + cfg["target_duration"]
-        print(f"Window extended to {cfg['target_duration']:.0f}s: {ts(start)} to {ts(end)}", file=sys.stderr)
+    need = cfg["max_duration"] + 6      # room for a teaser and for nudging main_start
+    if end - start < need:
+        end = start + need
+        print(f"Window extended to {need:.0f}s: {ts(start)} to {ts(end)}", file=sys.stderr)
     src = d / "source.mp4"
     if not src.exists():
         run(ytdlp_base(cfg) + ["-f", "bv*[height<=1080][fps<=60]+ba/b[height<=1080]/bv*+ba/b",
@@ -103,7 +104,10 @@ def render(proj: Path, n: int) -> Path:
     src = d / "source.mp4"
     SW, SH = video_size(src)
     W, H, FPS = cfg["width"], cfg["height"], cfg["fps"]
-    D = float(cfg["target_duration"])
+    D = float(plan.get("duration") or cfg["target_duration"])
+    if not cfg["min_duration"] <= D <= cfg["max_duration"]:
+        sys.exit(f"Clip {n}: duration {D}s is outside {cfg['min_duration']:.0f}-{cfg['max_duration']:.0f}s "
+                 "(set plan.json \"duration\" or target_duration in config.json)")
     Ht = int(H * cfg["top_ratio"]) // 2 * 2
     Hb = H - Ht
     avail = prep["duration"]
@@ -130,6 +134,8 @@ def render(proj: Path, n: int) -> Path:
     for a, b, o in segs:
         out_words += [{**w, "start": w["start"] - a + o, "end": min(w["end"], b) - a + o}
                       for w in words if a <= w["start"] < b]
+    if plan.get("caption_palette"):
+        cfg = {**cfg, "highlight_palette": plan["caption_palette"]}
     (d / "captions.ass").write_text(captions.build_ass(out_words, cfg, plan.get("hook"), plan.get("cta"),
                                                        plan.get("emphasis", []), D))
     (d / "captions.srt").write_text(captions.build_srt(out_words))
@@ -167,8 +173,13 @@ def render(proj: Path, n: int) -> Path:
         pr = next((e for e in press.library() if e["file"] == plan["press_file"]), None)
         if not pr:
             sys.exit(f"press_file {plan['press_file']} is not in the press library (dakie press list)")
+        other = press.used_by_other_clips(proj, n).get(pr["file"])
+        if other and not plan.get("press_reuse"):
+            sys.exit(f"Clip {n}: {pr['file']} is already used by clip {other}. Every clip needs its own press "
+                     "video: remove press_file to auto-pick a free one, or add more with `dakie press add`.")
     else:
-        pr = press.pick(plan.get("press_seed", n))
+        pr = press.pick_unique(proj, n)   # different press video for every clip in the project
+        print(f"Clip {n}: press video {pr['file']}", file=sys.stderr)
     inputs = ["-i", str(src), "-stream_loop", "-1", "-i", str(PRESS_DIR / pr["file"])]
     for _, p, _, _ in cues:
         inputs += ["-i", str(p)]

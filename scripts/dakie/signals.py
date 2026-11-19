@@ -37,7 +37,7 @@ def _smooth(a: np.ndarray, sigma: float) -> np.ndarray:
     return np.convolve(a, k / k.sum(), mode="same")
 
 
-def build(proj: Path, top_n: int = 25, chat_delay: float = 8.0) -> list[dict]:
+def build(proj: Path, top_n: int = 40, chat_delay: float = 8.0) -> list[dict]:
     cfg = load_config()
     info = read_json(proj / "info.json")
     loud = np.array(read_json(proj / "analysis" / "loudness.json"), dtype=float)

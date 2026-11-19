@@ -17,7 +17,9 @@ PRESS_DIR = HOME / "press_library"
 CONFIG_PATH = HOME / "config.json"
 
 DEFAULT_CONFIG = {
-    "target_duration": 180.0,          # seconds; YouTube Shorts/IG Reels max is 3:00
+    "target_duration": 58.0,           # seconds; default length of each finished clip
+    "min_duration": 50.0,              # a plan may set "duration" anywhere in this range
+    "max_duration": 60.0,              # <= 60 s keeps every clip a Short/Reel on all four platforms
     "width": 1080,
     "height": 1920,
     "fps": 30,
@@ -40,8 +42,12 @@ DEFAULT_CONFIG = {
     "caption_size": 104,
     "caption_y": None,                 # None = on the seam between press and gameplay
     "caption_color": "&H00FFFFFF",
-    "highlight_color": "&H0000FFFF",   # ASS BGR: yellow
-    "emphasis_color": "&H0000FFFF",    # ASS BGR: yellow (set e.g. &H003C3CFF for red)
+    # Colors are ASS &H00BBGGRR. The spoken word rotates through the palette (one colour per caption
+    # line), story keywords get the emphasis colour, numbers/money get the number colour.
+    "highlight_palette": ["&H0000E5FF", "&H00FFE123", "&H00D84FFF", "&H001F9AFF"],  # yellow, cyan, pink, orange
+    "emphasis_color": "&H003B3BFF",    # coral red, slightly larger
+    "number_color": "&H003BFF4B",      # lime green for 13, $527, 100%
+    "highlight_color": "&H0000E5FF",   # fallback when highlight_palette is empty
     "max_words_per_line": 3,
     "censor_profanity_in_captions": True,
     "whisper_scan_model": "base",

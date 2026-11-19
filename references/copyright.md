@@ -28,8 +28,10 @@ whenever the user asks whether a clip is "safe" or "owned".
   continue unless the user says they have written permission.
 
 ## Platform-specific risks to report
-- **YouTube Shorts > 1 minute with an active Content ID claim get blocked worldwide.** Our clips are
-  3 minutes, so any copyrighted music in a clip means a blocked Short. Treat music risk as serious.
+- **Content ID on Shorts:** YouTube blocks Shorts longer than 1 minute that have an active Content ID
+  claim. Our clips are 50–60 s, so a claim doesn't automatically block them, but the rights holder can
+  still mute, block or take the revenue from the Short. Keep clips at 60 s or less, and treat music
+  risk as serious.
 - TikTok/Instagram/Facebook mute or remove videos with detected copyrighted audio; repeat
   matches can restrict the account.
 - Streamers can file takedowns (DMCA) for unauthorized reuploads; three YouTube copyright

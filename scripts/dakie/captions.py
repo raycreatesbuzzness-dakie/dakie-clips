@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import re
 
+NUMBER_WORDS = {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven",
+                "twelve", "thirteen", "twenty", "thirty", "fifty", "hundred", "thousand", "million", "billion",
+                "dollars", "bucks", "first", "second", "third"}
 PROFANITY = ["fuck", "shit", "bitch", "cunt", "nigga", "nigger", "fag", "retard", "whore", "slut", "dick", "pussy", "cock"]
 
 
@@ -48,18 +51,27 @@ def _wrap_hook(text: str, cfg) -> tuple[list[str], int, int]:
         width = lambda t: font.getlength(t)
     except OSError:
         width = lambda t: len(t) * size * 0.55
+    glue = lambda t: re.sub(r"\b(GTA|Part|No\.?|\$)\s+(\d+|VI|V)\b", "\\1\u00a0\\2", t, flags=re.I)
     lines = []
-    for para in re.split(r"\\N|\n", text):
-        cur = ""
-        for word in para.split():
+    for para in re.split(r"\\N|\n", glue(text)):
+        words, cur, para_lines = para.split(), "", []
+        for word in words:
             trial = f"{cur} {word}".strip()
             if cur and width(trial) > cfg["hook_max_width"]:
-                lines.append(cur)
+                para_lines.append(cur)
                 cur = word
             else:
                 cur = trial
         if cur:
-            lines.append(cur)
+            para_lines.append(cur)
+        if len(para_lines) == 2 and len(words) > 2:   # balance: no short orphan second line
+            best = min(range(1, len(words)),
+                       key=lambda k: max(width(" ".join(words[:k])), width(" ".join(words[k:]))))
+            a, b = " ".join(words[:best]), " ".join(words[best:])
+            if max(width(a), width(b)) <= cfg["hook_max_width"]:
+                para_lines = [a, b]
+        lines += para_lines
+    lines = [l.replace("\u00a0", " ") for l in lines]
     pad_x, pad_y, line_h = int(size * 0.55), int(size * 0.32), size * 1.18
     bw = int(max(width(l) for l in lines) + 2 * pad_x)
     bh = int(len(lines) * line_h + 2 * pad_y)
@@ -77,7 +89,7 @@ def _rounded_rect(w: float, h: float, r: float) -> str:
             f"l {f(0, r)} b {f(0, r - k, r - k, 0, r, 0)}")
 
 
-def build_ass(words, cfg, hook=None, cta=None, emphasis=(), duration=180.0) -> str:
+def build_ass(words, cfg, hook=None, cta=None, emphasis=(), duration=58.0) -> str:
     W, H = cfg["width"], cfg["height"]
     seam = int(H * cfg["top_ratio"])
     cy = cfg["caption_y"] or seam
@@ -101,7 +113,12 @@ Style: Cta,{font},{int(size*0.7)},&H00FFFFFF,&H000000FF,&H00000000,&H96000000,-1
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     ev = []
-    for ch in chunk_words(words, cfg["max_words_per_line"]):
+    palette = list(cfg.get("highlight_palette") or [cfg.get("highlight_color", "&H0000E5FF")])
+    num_col = cfg.get("number_color", palette[0])
+    is_num = lambda w: bool(re.search(r"\d|\$|%", w)) or w.lower().strip(".,!?") in NUMBER_WORDS
+    caps = []   # [start, end, text]; trimmed below so two caption lines never overlap
+    for ci, ch in enumerate(chunk_words(words, cfg["max_words_per_line"])):
+        active = palette[ci % len(palette)]          # new colour every line keeps the eye moving
         end_chunk = ch[-1]["end"] + 0.12
         for i, w in enumerate(ch):
             st = w["start"]
@@ -110,15 +127,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for j, x in enumerate(ch):
                 txt = _esc(_censor(x["word"]) if cfg["censor_profanity_in_captions"] else x["word"]).upper()
                 key = x["word"].lower().strip(".,!?\"'")
+                still = cfg["emphasis_color"] if key in emph else (num_col if is_num(x["word"]) else None)
                 if j == i:
-                    col = cfg["emphasis_color"] if key in emph else cfg["highlight_color"]
-                    parts.append(f"{{\\c{col}\\fscx108\\fscy108}}{txt}{{\\r}}")
-                elif key in emph:
-                    parts.append(f"{{\\c{cfg['emphasis_color']}}}{txt}{{\\r}}")
+                    col = still or active
+                    size = 116 if key in emph else 110
+                    parts.append(f"{{\\c{col}\\fscx{size}\\fscy{size}}}{txt}{{\\r}}")
+                elif still:
+                    parts.append(f"{{\\c{still}}}{txt}{{\\r}}")
                 else:
                     parts.append(txt)
             pop = "{\\fscx70\\fscy70\\t(0,90,\\fscx100\\fscy100)}" if i == 0 else ""
-            ev.append(f"Dialogue: 1,{_ass_time(st)},{_ass_time(en)},Cap,,0,0,0,,{{\\pos({W//2},{cy})}}{pop}{' '.join(parts)}")
+            caps.append([st, en, f"{{\\pos({W//2},{cy})}}{pop}{' '.join(parts)}"])
+    caps.sort(key=lambda c: c[0])
+    for i, c in enumerate(caps):
+        if i + 1 < len(caps):
+            c[1] = min(c[1], caps[i + 1][0])
+        if c[1] - c[0] >= 0.04:
+            ev.append(f"Dialogue: 1,{_ass_time(c[0])},{_ass_time(c[1])},Cap,,0,0,0,,{c[2]}")
     if hook and hook.get("text"):
         hd = float(hook.get("duration") or duration)
         lines, bw, bh = _wrap_hook(hook["text"], cfg)
