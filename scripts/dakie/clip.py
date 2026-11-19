@@ -154,7 +154,11 @@ def render(proj: Path, n: int) -> Path:
     anchor = 0.5
     if face.get("mode") == "overlay" and sw > W:
         bx, _, bw, _ = face["box"]
-        if face["side"] == "right" and bx * s >= W:
+        centre_x0 = (sw - W) / 2
+        cam_hidden_by_centre = (bx + bw) * s <= centre_x0 or bx * s >= centre_x0 + W
+        if cam_hidden_by_centre:
+            anchor = 0.5          # centre crop already leaves the original webcam out
+        elif face["side"] == "right" and bx * s >= W:
             anchor = 0.0
         elif face["side"] == "left" and (bx + bw) * s <= sw - W:
             anchor = 1.0
@@ -215,8 +219,16 @@ def render(proj: Path, n: int) -> Path:
         bd = int(cfg.get("facecam_border", 4))
         fc.append(f"[fsrc]crop={cw}:{ch}:x='{xe}':y='{ye}',scale={fw}:{fh},setsar=1,"
                   f"pad={fw + 2 * bd}:{fh + 2 * bd}:{bd}:{bd}:color={cfg.get('facecam_border_color', 'black')}[cam]")
+        # hide the cam box where the stream layout has no webcam overlay (plan "cam_off": [[a, b], ...] in source seconds)
+        off = []
+        for ca, cb in plan.get("cam_off", []):
+            for a, b, o in segs:
+                lo, hi = max(a, ca), min(b, cb)
+                if hi > lo:
+                    off.append(f"between(t,{lo - a + o:.2f},{hi - a + o:.2f})")
+        enable = f":enable='not({'+'.join(off)})'" if off else ""
         fc.append(f"[{last}][cam]overlay=x={W - fw - 2 * bd - cfg['facecam_margin_right']}:"
-                  f"y={H - fh - 2 * bd - cfg['facecam_margin_bottom']}[withcam]")
+                  f"y={H - fh - 2 * bd - cfg['facecam_margin_bottom']}{enable}[withcam]")
         last = "withcam"
     if cfg.get("progress_bar"):
         fc.append(f"color=c=0xFFD400:s={W}x10:r={FPS}:d={D}[bar]")

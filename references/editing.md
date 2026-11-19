@@ -29,6 +29,7 @@ unless the key is `t_out` (seconds in the finished video).
 | `sfx` | 3–8 cues per 3-minute clip, spaced ≥ 10 s apart. Use `dakie sfx list` names only. |
 | `zooms` | 2–5 punch-ins on the gameplay at peak reactions. `amount` 0.12–0.25, `dur` 0.6–1.2 s. |
 | `cta` | Optional text for the last 3 s (keep it short; no "link in bio" for Shorts). |
+| `cam_off` | Optional `[[start, end], ...]` (clip seconds) where the cam box is hidden, e.g. while the stream shows the camera full-screen and has no webcam overlay. Check a frame timeline of `source.mp4` during QA. |
 | `press_file` | Which top-panel clip to use (`dakie press list`). Prefer real footage (`pexels_press_*`) and use a different clip for each of the 5 videos where possible. If omitted, `press_seed` picks one at random. |
 
 ## Writing the hook (first 3 seconds decide retention)
