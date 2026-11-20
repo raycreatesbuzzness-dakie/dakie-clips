@@ -165,9 +165,9 @@ def render(proj: Path, n: int) -> Path:
         if cam_hidden_by_centre:
             anchor = 0.5          # centre crop already leaves the original webcam out
         elif face["side"] == "right" and bx * s >= W:
-            anchor = 0.0
+            anchor = (bx * s - W) / (sw - W)        # end the crop just left of the webcam
         elif face["side"] == "left" and (bx + bw) * s <= sw - W:
-            anchor = 1.0
+            anchor = (bx + bw) * s / (sw - W)       # start the crop just right of the webcam
 
     if plan.get("press_file"):
         pr = next((e for e in press.library() if e["file"] == plan["press_file"]), None)
@@ -195,7 +195,21 @@ def render(proj: Path, n: int) -> Path:
 
     cam = face.get("mode") == "overlay"
     fc.append("[bv]split=2[gsrc][fsrc]" if cam else "[bv]null[gsrc]")
-    game = (f"[gsrc]scale={sw}:{Hb},crop={W}:{Hb}:{int((sw - W) * anchor)}:0,setsar=1")
+    # where the stream shows the camera full-screen (plan "cam_off"), people sit in the middle of the
+    # frame, so the crop goes back to centre there; elsewhere it avoids the original webcam overlay
+    off_out = []
+    for ca, cb in plan.get("cam_off", []):
+        for a, b, o in segs:
+            lo, hi = max(a, ca), min(b, cb)
+            if hi > lo:
+                off_out.append((lo - a + o, hi - a + o))
+    gx, cx_ = int((sw - W) * anchor), int((sw - W) * float(plan.get("cam_off_anchor", 0.5)))
+    if off_out and gx != cx_:
+        cond = "+".join(f"between(t,{x:.2f},{y:.2f})" for x, y in off_out)
+        gx_expr = f"'if({cond},{cx_},{gx})'"
+    else:
+        gx_expr = str(gx)
+    game = (f"[gsrc]scale={sw}:{Hb},crop={W}:{Hb}:{gx_expr}:0,setsar=1")
     if zooms:
         game += (f",zoompan=z='1+({_bump(zooms, 'in/' + str(FPS))})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
                  f":d=1:s={W}x{Hb}:fps={FPS}")
@@ -273,3 +287,35 @@ def render(proj: Path, n: int) -> Path:
                                    "facecam_mode": face.get("mode"), "teaser": bool(td)})
     print(f"Rendered {out} ({media_duration(out):.2f}s)")
     return out
+
+
+# ------------------------------------------------------------------ layout check
+def layout_timeline(proj: Path, n: int, min_run: int = 3) -> dict:
+    """Per second: is the webcam overlay on screen? Looks for the overlay's hard inner edge
+    (right edge for a left-side cam, left edge for a right-side cam). Long stretches without it
+    (camera full-screen, menus) are suggested as plan "cam_off" ranges."""
+    d = clip_dir(proj, n)
+    face = read_json(d / "facecam.json")
+    if face.get("mode") != "overlay":
+        return {"timeline": "", "cam_off": [], "note": f"facecam mode is {face.get('mode')}"}
+    bx, by, bw, bh = face["box"]
+    W = face.get("W", 1920)
+    ex = bx + bw if face.get("side", "left") == "left" else bx
+    ex = int(min(max(ex, 12), W - 12))
+    h = int(min(bh, 1080 - by) - 20)
+    raw = subprocess.run([ffmpeg(), "-hide_banner", "-loglevel", "error", "-i", str(d / "source.mp4"),
+                          "-vf", f"fps=1,crop=24:{h}:{ex - 12}:{by + 10}", "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+                         capture_output=True).stdout
+    fr = np.frombuffer(raw, np.uint8).reshape(-1, h, 24).astype(float)
+    edge = np.abs(fr[:, :, 12] - fr[:, :, 11]).mean(axis=1)
+    ref = (np.abs(fr[:, :, 6] - fr[:, :, 5]).mean(axis=1) + np.abs(fr[:, :, 18] - fr[:, :, 17]).mean(axis=1)) / 2
+    on = edge / (ref + 1) > 2.5
+    off, start = [], None
+    for i, v in enumerate(list(on) + [True]):
+        if not v and start is None:
+            start = i
+        elif v and start is not None:
+            if i - start >= min_run:
+                off.append([max(0, start - 0.5), i + 0.5 if i < len(on) else float(len(on) + 1)])
+            start = None
+    return {"timeline": "".join("." if v else "F" for v in on), "cam_off": off}

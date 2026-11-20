@@ -86,7 +86,8 @@ Number the approved clips 1–10 in the user's order (or by rank). For each clip
      full-resolution crop; set `"track": []` for a static crop of the overlay);
    - a camera-only clip (no gameplay) gets `"mode": "fullcam"` (no cam box);
    - if the layout switches mid-clip (camera full-screen → gameplay with overlay), add
-     `"cam_off": [[start, end]]` to the plan for the camera-only stretch.
+     `"cam_off": [[start, end]]` to the plan for the camera-only stretch. After the box is right,
+     `dakie layout <project> <n>` prints a per-second overlay timeline and the suggested `cam_off`.
 3. `dakie words <project> <n>` shows the timed transcript (seconds from the clip start). If Whisper
    missed a key line that the full-stream transcript has, add it to `words.json` (see editing.md).
 4. Write `clips/clip_NN/plan.json`. Follow `references/editing.md` for the schema, title writing,

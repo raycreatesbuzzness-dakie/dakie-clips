@@ -32,6 +32,7 @@ unless the key is `t_out` (seconds in the finished video).
 | `zooms` | 1–3 punch-ins on the gameplay at peak reactions. `amount` 0.12–0.25, `dur` 0.6–1.2 s. |
 | `cta` | Optional text for the last 3 s (keep it short; no "link in bio" for Shorts). |
 | `cam_off` | Optional `[[start, end], ...]` (clip seconds) where the cam box is hidden, e.g. while the stream shows the camera full-screen and has no webcam overlay. Check a frame timeline of `source.mp4` during QA. |
+| `cam_off_anchor` | Where the gameplay crop points during `cam_off` stretches: 0 = left, 0.5 = centre (default), 1 = right. Use it when the person who matters stands off-centre in the full-screen camera. |
 | `press_file` | Normally **leave it out**: the renderer gives each clip in the project its own press video, highest priority first (real footage before generated loops). Set it only to choose a specific free video; one already used by another clip is refused unless `"press_reuse": true`. |
 
 ## Writing the title (first 3 seconds decide retention)

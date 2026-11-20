@@ -8,6 +8,7 @@
   dakie text <project> <from> <to>    print transcript for a range (--compact 30)
   dakie prepare <project> <n> <start> <end>   download section, word timings, face tracking
   dakie words <project> <n>           print the clip's timed transcript (for writing the plan)
+  dakie layout <project> <n>          when the webcam overlay is on screen; suggests plan "cam_off"
   dakie render <project> <n>          render clips/clip_NN/plan.json -> final.mp4
   dakie package <project> <n>         validate meta.json, copyright checklist, copy to final/
   dakie keywords <phrase> [...]       YouTube search suggestions for hashtag/SEO research
@@ -44,6 +45,7 @@ def main(argv=None):
     p = sub.add_parser("prepare"); p.add_argument("project"); p.add_argument("n", type=int)
     p.add_argument("start"); p.add_argument("end")
     p = sub.add_parser("words"); p.add_argument("project"); p.add_argument("n", type=int)
+    p = sub.add_parser("layout"); p.add_argument("project"); p.add_argument("n", type=int)
     p = sub.add_parser("render"); p.add_argument("project"); p.add_argument("n", type=int)
     p = sub.add_parser("package"); p.add_argument("project"); p.add_argument("n", type=int)
     p = sub.add_parser("keywords"); p.add_argument("phrases", nargs="+")
@@ -97,6 +99,12 @@ def main(argv=None):
     elif a.cmd == "words":
         from .clip import dump_words
         print(dump_words(project_dir(a.project), a.n))
+    elif a.cmd == "layout":
+        from .clip import layout_timeline
+        r = layout_timeline(project_dir(a.project), a.n)
+        print(r["timeline"] or r.get("note"))
+        print("(1 char per second: . = webcam overlay on screen, F = no overlay / camera full-screen)")
+        print("suggested plan cam_off:", json.dumps(r["cam_off"]))
     elif a.cmd == "render":
         from .clip import render
         render(project_dir(a.project), a.n)

@@ -29,7 +29,22 @@ def _esc(s: str) -> str:
     return s.replace("{", "(").replace("}", ")").replace("\\", "/")
 
 
+def clean_words(words: list[dict]) -> list[dict]:
+    """Drop empty tokens and rejoin split numbers ("$250" + ",000" -> "$250,000")."""
+    out = []
+    for w in words:
+        word = (w.get("word") or "").strip()
+        if not word:
+            continue
+        if out and re.match(r"^[,.]\d", word) and re.search(r"\d$", out[-1]["word"]):
+            out[-1] = {**out[-1], "word": out[-1]["word"] + word, "end": w["end"]}
+            continue
+        out.append({**w, "word": word})
+    return out
+
+
 def chunk_words(words: list[dict], max_words: int) -> list[list[dict]]:
+    words = clean_words(words)
     chunks, cur = [], []
     for i, w in enumerate(words):
         if cur and (len(cur) >= max_words or w["start"] - cur[-1]["end"] > 0.45
