@@ -137,9 +137,40 @@ def whisper_transcribe(wav: Path, model_name: str, word_timestamps=False, offset
 
 
 # ---------------------------------------------------------------- chat
+def _ytdlp_live_chat(proj: Path, info: dict, out: Path) -> int:
+    """Fallback: YouTube chat replay via yt-dlp's live_chat subtitle track (JSON lines)."""
+    if "live_chat" not in (info.get("has_subtitles") or []):
+        return 0
+    raw = proj / "source" / "chat.live_chat.json"
+    if not raw.exists():
+        run(ytdlp_base(load_config()) + ["--skip-download", "--write-subs", "--sub-langs", "live_chat",
+                                         "-o", str(proj / "source" / "chat"), info["source_url"]], check=False)
+    if not raw.exists():
+        return 0
+    n = 0
+    with raw.open() as src, out.open("w") as f:
+        for line in src:
+            try:
+                d = json.loads(line)["replayChatItemAction"]
+            except (ValueError, KeyError):
+                continue
+            t = int(d.get("videoOffsetTimeMsec", 0)) / 1000
+            for a in d.get("actions", []):
+                it = a.get("addChatItemAction", {}).get("item", {})
+                r = it.get("liveChatTextMessageRenderer") or it.get("liveChatPaidMessageRenderer")
+                if not r or t < 0:
+                    continue
+                text = "".join(x.get("text") or (x.get("emoji", {}).get("shortcuts") or [""])[0]
+                               for x in r.get("message", {}).get("runs", []))
+                f.write(json.dumps({"t": round(t, 1), "a": r.get("authorName", {}).get("simpleText", ""),
+                                    "m": text}, ensure_ascii=False) + "\n")
+                n += 1
+    return n
+
+
 def fetch_chat(proj: Path, info: dict) -> int:
     out = proj / "analysis" / "chat.jsonl"
-    if out.exists():
+    if out.exists() and out.stat().st_size > 0:
         return sum(1 for _ in out.open())
     try:
         from chat_downloader import ChatDownloader
@@ -156,11 +187,16 @@ def fetch_chat(proj: Path, info: dict) -> int:
                 if n % 2000 == 0:
                     print(f"\r  chat messages: {n}", end="", file=sys.stderr)
         print(file=sys.stderr)
-        return n
+        if n:
+            return n
     except Exception as e:  # chat replay is optional (Kick, disabled chat, etc.)
+        print(f"chat-downloader: {type(e).__name__}: {e}", file=sys.stderr)
+    out.unlink(missing_ok=True)
+    n = _ytdlp_live_chat(proj, info, out)
+    if not n:
         out.unlink(missing_ok=True)
-        print(f"Chat replay unavailable: {type(e).__name__}: {e}", file=sys.stderr)
-        return 0
+        print("Chat replay unavailable for this video.", file=sys.stderr)
+    return n
 
 
 def fetch_comment_marks(proj: Path, info: dict, cfg: dict) -> int:

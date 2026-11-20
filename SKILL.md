@@ -43,7 +43,7 @@ Dakie they can add real footage with `dakie press add` (see "Managing libraries"
    Read `references/copyright.md` for the rules you apply here and in Phase 4.
 
 ## Phase 2: Find and rank the 20 best moments
-1. `dakie scan <project>` (background). This downloads chat replay, viewer comments that cite
+1. `dakie scan <project>` (background). This downloads chat replay (chat-downloader, falling back to yt-dlp's live_chat track), viewer comments that cite
    timestamps (YouTube), the audio track (for loudness and, without platform captions, a Whisper
    transcript). A long VOD can take 30–90 minutes. Tell the user it is running.
 2. `dakie candidates <project>` then read `<project>/analysis/candidates.md` in full.
