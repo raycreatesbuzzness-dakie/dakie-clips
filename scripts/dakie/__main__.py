@@ -245,4 +245,11 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except RuntimeError as e:          # API errors: show the message, not a traceback
+        msg = str(e)
+        if "expired" in msg.lower() or "validating access token" in msg.lower():
+            msg += ("\n\nThe token has expired. Generate a new one (for Meta: Graph API Explorer > "
+                    "Generate Access Token) and run the setup again right away.")
+        sys.exit("\n" + msg)
