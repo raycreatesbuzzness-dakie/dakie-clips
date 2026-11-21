@@ -108,6 +108,17 @@ press-footage libraries in `~/DakieClips/`. It links the `dakie` command to `~/.
 Layout, fonts, caption color palette, clip length range and Whisper models are set in
 `~/DakieClips/config.json`.
 
+## Uploading automatically (optional, free)
+Connect your own YouTube, Instagram, Facebook and TikTok accounts through each platform's official
+API (free developer apps, no third-party service). After packaging, Claude shows an upload plan and
+**uploads only after you approve it**. TikTok clips land in your drafts for a one-tap post.
+Step-by-step setup: [references/publishing.md](references/publishing.md).
+
+```bash
+dakie publish status                 # what's connected
+dakie publish setup youtube|meta|tiktok
+```
+
 ## Adding your own media
 Both libraries take single files, several files, or whole folders, and everything you add is
 available to the next edit. A license is required for every item, so each video's copyright

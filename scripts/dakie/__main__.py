@@ -12,6 +12,7 @@
   dakie render <project> <n>          render clips/clip_NN/plan.json -> final.mp4
   dakie package <project> <n>         validate meta.json, copyright checklist, copy to final/
   dakie keywords <phrase> [...]       YouTube search suggestions for hashtag/SEO research
+  dakie publish status|setup|plan|run|enable|disable|privacy   upload finished clips (always with approval)
   dakie sfx list|add|remove|tag|suggest|rebuild     manage the sound-effects library
   dakie press list|add|remove|enable|disable|priority|generate   manage hydraulic press footage
 
@@ -49,6 +50,13 @@ def main(argv=None):
     p = sub.add_parser("render"); p.add_argument("project"); p.add_argument("n", type=int)
     p = sub.add_parser("package"); p.add_argument("project"); p.add_argument("n", type=int)
     p = sub.add_parser("keywords"); p.add_argument("phrases", nargs="+")
+    p = sub.add_parser("publish", help="upload finished clips to YouTube, Instagram, Facebook, TikTok")
+    p.add_argument("action", choices=["status", "setup", "plan", "run", "enable", "disable", "privacy"])
+    p.add_argument("args", nargs="*")
+    p.add_argument("--clips", default=""); p.add_argument("--platforms", default="")
+    p.add_argument("--approve"); p.add_argument("--force", action="store_true")
+    p.add_argument("--include-red", action="store_true")
+    p.add_argument("--client-secret-file"); p.add_argument("--page-id"); p.add_argument("--port", type=int, default=8765)
     p = sub.add_parser("sfx"); p.add_argument("action", choices=["list", "add", "remove", "tag", "suggest", "rebuild"])
     p.add_argument("args", nargs="*")
     p.add_argument("--name"); p.add_argument("--tags", default=""); p.add_argument("--license")
@@ -112,6 +120,51 @@ def main(argv=None):
     elif a.cmd == "package":
         from .meta import package
         package(project_dir(a.project), a.n)
+    elif a.cmd == "publish":
+        from . import publish as pub
+        if a.action == "status":
+            print(pub.status())
+        elif a.action == "setup":
+            import getpass
+            which = (a.args or [""])[0]
+            if which == "youtube":
+                f = a.client_secret_file or input("Path to the Google OAuth client JSON (Desktop app): ").strip()
+                pub.setup_youtube(f, a.port)
+            elif which in ("meta", "instagram", "facebook"):
+                app_id = input("Meta App ID: ").strip()
+                secret = getpass.getpass("Meta App Secret (hidden): ").strip()
+                token = getpass.getpass("User access token from Graph API Explorer (hidden): ").strip()
+                pub.setup_meta(app_id, secret, token, a.page_id)
+            elif which == "tiktok":
+                key = input("TikTok Client Key: ").strip()
+                secret = getpass.getpass("TikTok Client Secret (hidden): ").strip()
+                pub.setup_tiktok(key, secret, a.port)
+            else:
+                sys.exit("usage: dakie publish setup youtube|meta|tiktok   (see references/publishing.md)")
+        elif a.action in ("enable", "disable"):
+            if not a.args or a.args[0] not in pub.PLATFORMS:
+                sys.exit(f"usage: dakie publish {a.action} {'|'.join(pub.PLATFORMS)}")
+            pub._set_enabled(a.args[0], a.action == "enable")
+            print(pub.status())
+        elif a.action == "privacy":
+            if not a.args or a.args[0] not in ("public", "unlisted", "private"):
+                sys.exit("usage: dakie publish privacy public|unlisted|private   (YouTube default)")
+            cfg = json.loads(CONFIG_PATH.read_text())
+            cfg.setdefault("publish", {}).setdefault("youtube", {})["privacy"] = a.args[0]
+            CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+            print(pub.status())
+        elif a.action == "plan":
+            if not a.args:
+                sys.exit("usage: dakie publish plan <project> [--clips 1,2,3] [--platforms youtube,tiktok]")
+            clips = [int(x) for x in a.clips.split(",") if x.strip()] or None
+            plats = [x.strip() for x in a.platforms.split(",") if x.strip()] or None
+            plan = pub.make_plan(project_dir(a.args[0]), clips, plats, a.include_red)
+            print(pub.plan_markdown(plan))
+        elif a.action == "run":
+            if not a.args or not a.approve:
+                sys.exit("usage: dakie publish run <project> --approve <plan id>   "
+                         "(only after the plan was reviewed and approved)")
+            pub.run_plan(project_dir(a.args[0]), a.approve, a.force)
     elif a.cmd == "keywords":
         from .meta import keyword_suggestions
         for ph in a.phrases:

@@ -1,0 +1,111 @@
+# Uploading clips automatically (YouTube, Instagram, Facebook, TikTok)
+
+Dakie Clips can upload your finished clips with their titles, descriptions and hashtags, using each
+platform's **official API**. Everything here is **free**: you create your own free developer "app" on
+each platform once, and your Mac talks to the platforms directly. No third-party service is involved.
+
+**Nothing is ever uploaded without your approval.** After packaging, Claude shows an upload plan
+(every clip × platform, with its title and copyright notes) and waits until you reply with that plan's
+ID. Every upload is logged, so the same clip is never posted twice.
+
+| Platform | What happens | One-time setup |
+|---|---|---|
+| YouTube Shorts | Uploaded with title, description, tags; public, unlisted or private (your choice) | ~10 min (Google Cloud) |
+| Instagram Reels | Posted with caption and hashtags | ~15 min (Meta app, shared with Facebook) |
+| Facebook Reels | Posted to your Facebook Page with caption | same Meta app |
+| TikTok | Lands in your TikTok **inbox/drafts**; you tap the notification, paste the caption, choose Everyone, Post | ~15 min (TikTok developer app) |
+
+Logins are saved in `~/DakieClips/accounts/` (readable only by your Mac user, never uploaded to GitHub).
+**Run the setup commands yourself in Terminal.** They ask for secrets at a hidden prompt; never paste
+secrets or tokens into a chat.
+
+Check what's connected at any time:
+
+```bash
+dakie publish status
+```
+
+---
+
+## YouTube (free, up to 100 uploads a day)
+
+1. Go to **console.cloud.google.com** and create a project (e.g. "Dakie Clips").
+2. **APIs & Services → Library** → search **YouTube Data API v3** → **Enable**.
+3. **Google Auth Platform → Branding**: app name "Dakie Clips", your email as support and developer
+   contact. **Audience**: User type **External**, then **Publish app** (set it to *In production*).
+   - Why production: in *Testing* mode Google expires your login every 7 days.
+   - You'll see a "Google hasn't verified this app" screen when you sign in. That's expected for a
+     personal app: click **Advanced → Go to Dakie Clips (unsafe)**. It's your own app.
+4. **Clients → Create client → Application type: Desktop app** → **Create** → **Download JSON**.
+5. In Terminal:
+   ```bash
+   dakie publish setup youtube --client-secret-file ~/Downloads/client_secret_XXXX.json
+   ```
+   Your browser opens; sign in with the Google account that owns your channel and allow access.
+   Terminal then prints `YouTube connected: <your channel>`.
+6. Default privacy is **public**. Change it with `dakie publish privacy unlisted` (or `private`).
+
+## Instagram + Facebook (one free Meta app for both)
+
+**Before you start:** your Instagram must be a **Business or Creator** account (Instagram app →
+Settings → Account type and tools) and **linked to a Facebook Page** you manage (Facebook Page →
+Settings → Linked accounts → Instagram).
+
+1. Go to **developers.facebook.com** → **My Apps → Create App**. Pick the use case for managing a
+   Page and Instagram content (or **Other → Business**). Leave the app in **Development** mode: that's
+   enough to post to accounts you own.
+2. **App settings → Basic**: note the **App ID**, click **Show** next to **App Secret**.
+3. Open **Graph API Explorer** (Tools menu). Select your app, choose **User Token**, and add these
+   permissions: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`,
+   `instagram_content_publish`, `business_management`. Click **Generate Access Token** and approve
+   your Page and Instagram account.
+4. In Terminal:
+   ```bash
+   dakie publish setup meta
+   ```
+   Paste the App ID, the App Secret and the token when asked (they're hidden). If you manage several
+   Pages, it lists them; run again with `--page-id <id>`.
+5. The Instagram login lasts about **60 days**. `dakie publish status` warns a week before it expires;
+   then repeat steps 3–4.
+
+## TikTok (free; clips go to your drafts)
+
+1. Go to **developers.tiktok.com**, log in, **Manage apps → Connect an app**.
+2. Add the products **Login Kit** and **Content Posting API**. Request the scopes
+   `user.info.basic` and `video.upload`.
+3. Platform **Desktop**; redirect URI: `http://localhost:8765/callback/`
+4. Until TikTok reviews your app, use **Sandbox**: add your own TikTok account under
+   **Sandbox → Target users**.
+5. Note the **Client Key** and **Client Secret**, then in Terminal:
+   ```bash
+   dakie publish setup tiktok
+   ```
+   Sign in to TikTok in the browser window that opens and allow access.
+6. After each upload you'll get a TikTok notification. Open it, paste the caption (Claude shows it,
+   and it's in `metadata.md`), choose **Everyone**, and post.
+   - Fully automatic TikTok posting needs TikTok's free app review (their **Direct Post** feature);
+     until then it stays this one-tap flow.
+
+TikTok's developer site changes often. If a menu name differs, look for the same product names.
+
+---
+
+## Using it
+
+After `dakie package`, Claude offers the upload plan automatically
+(`"publish": {"offer_after_package": true}` in `~/DakieClips/config.json`). You can also ask any time,
+e.g. "upload clips 1–5 to YouTube and TikTok". Under the hood:
+
+```bash
+dakie publish plan <project> [--clips 1,2,3] [--platforms youtube,instagram,facebook,tiktok]
+dakie publish run <project> --approve <plan id>      # only after you approved that ID
+```
+
+- Turn a platform off or on: `dakie publish disable tiktok` / `dakie publish enable tiktok`
+- Results and links: `<project>/final/publish_log.json`
+- Clips with a 🔴 copyright item are never put in a plan unless you explicitly ask for it.
+- A plan is valid for 24 hours, and a clip that changes after approval is skipped until you approve again.
+
+**Copyright still applies.** Uploading is easy now, so the rule matters more: only publish clips of
+streamers who allow it (a clipping program, Discord rule or written OK). Repeated claims or strikes can
+restrict or remove your accounts.
