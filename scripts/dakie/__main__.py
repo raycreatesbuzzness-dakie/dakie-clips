@@ -126,19 +126,34 @@ def main(argv=None):
             print(pub.status())
         elif a.action == "setup":
             import getpass
+
+            def ask(label, hidden=False):
+                while True:      # paste, then Return; an empty answer just asks again
+                    v = (getpass.getpass(label) if hidden else input(label)).strip()
+                    if v:
+                        return v
+                    print("  (nothing received - paste it with Cmd+V, then press Return)")
             which = (a.args or [""])[0]
             if which == "youtube":
                 f = a.client_secret_file or input("Path to the Google OAuth client JSON (Desktop app): ")
                 f = f.strip().strip("'\"").replace("\\ ", " ")   # accept drag-and-drop paths
                 pub.setup_youtube(f, a.port)
             elif which in ("meta", "instagram", "facebook"):
-                app_id = input("Meta App ID: ").strip()
-                secret = getpass.getpass("Meta App Secret (hidden): ").strip()
-                token = getpass.getpass("User access token from Graph API Explorer (hidden): ").strip()
+                app_id = ask("Meta App ID: ")
+                secret = ask("Meta App Secret (hidden): ", True)
+                token = ask("User access token from Graph API Explorer (hidden): ", True)
                 pub.setup_meta(app_id, secret, token, a.page_id)
             elif which == "tiktok":
-                key = input("TikTok Client Key: ").strip()
-                secret = getpass.getpass("TikTok Client Secret (hidden): ").strip()
+                key = ask("TikTok Client Key: ")
+                while True:
+                    secret = ask("TikTok Client Secret (hidden): ", True)
+                    ok, why = pub.check_tiktok_client(key, secret)
+                    if ok:
+                        print("  Key and secret accepted by TikTok.")
+                        break
+                    print(f"  TikTok rejected this key + secret ({why}). The secret you pasted is {len(secret)} "
+                          "characters long.\n  Make sure you're on the SANDBOX tab, reveal Client secret, use its copy "
+                          "button, then paste again.")
                 pub.setup_tiktok(key, secret, a.port)
             else:
                 sys.exit("usage: dakie publish setup youtube|meta|tiktok   (see references/publishing.md)")

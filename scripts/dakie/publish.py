@@ -12,6 +12,7 @@ import http.server
 import json
 import os
 import secrets
+import socket
 import socketserver
 import sys
 import threading
@@ -113,6 +114,8 @@ def _check(status, resp, what):
                          and not (isinstance(resp["error"], dict) and resp["error"].get("code") in ("ok", 0))):
         err = resp.get("error") if isinstance(resp, dict) else resp
         msg = err.get("message") if isinstance(err, dict) else str(err)
+        if isinstance(resp, dict) and resp.get("error_description"):     # OAuth-style errors (TikTok, Google)
+            msg = f"{msg}: {resp['error_description']}"
         raise RuntimeError(f"{what} failed (HTTP {status}): {str(msg)[:400]}")
     return resp
 
@@ -136,7 +139,7 @@ def _browser_login(auth_url: str, port: int, path: str = "/") -> dict:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
-                self.wfile.write("<h2>Dakie Clips: connected. You can close this tab.</h2>".encode())
+                self.wfile.write("<h2>Dakie Clips: sign-in received.</h2><p>Go back to the Terminal window: it says whether the account was saved. You can close this tab.</p>".encode())
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -144,16 +147,30 @@ def _browser_login(auth_url: str, port: int, path: str = "/") -> dict:
         def log_message(self, *a):
             pass
 
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("127.0.0.1", port), H) as srv:
-        t = threading.Thread(target=srv.serve_forever, daemon=True)
-        t.start()
-        print(f"\nOpening the sign-in page in your browser. If it doesn't open, visit:\n{auth_url}\n", file=sys.stderr)
-        webbrowser.open(auth_url)
-        deadline = time.time() + 300
-        while not result and time.time() < deadline:
-            time.sleep(0.3)
+    H.timeout = 5        # an idle browser pre-connection can't block the listener
+
+    class V4(socketserver.ThreadingTCPServer):
+        daemon_threads = True
+        allow_reuse_address = True
+
+    class V6(V4):
+        address_family = socket.AF_INET6
+
+    servers = [V4(("127.0.0.1", port), H)]
+    try:                     # 'localhost' often resolves to ::1 first, so listen there too
+        servers.append(V6(("::1", port), H))
+    except OSError:
+        pass
+    for srv in servers:
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+    print(f"\nOpening the sign-in page in your browser. If it doesn't open, visit:\n{auth_url}\n", file=sys.stderr)
+    webbrowser.open(auth_url)
+    deadline = time.time() + 300
+    while not result and time.time() < deadline:
+        time.sleep(0.3)
+    for srv in servers:
         srv.shutdown()
+        srv.server_close()
     if not result:
         raise SystemExit("Timed out waiting for the sign-in redirect (5 minutes). Run the setup command again.")
     if "error" in result:
@@ -325,6 +342,16 @@ def upload_facebook(item: dict) -> dict:
 
 
 # ------------------------------------------------------------------ TikTok
+def check_tiktok_client(client_key: str, client_secret: str) -> tuple[bool, str]:
+    """Ask TikTok whether this key + secret pair is valid (client-credentials grant; no user involved)."""
+    st, r, _ = _http("POST", BASES["tiktok_api"] + "/v2/oauth/token/", form={
+        "client_key": client_key, "client_secret": client_secret, "grant_type": "client_credentials"})
+    if isinstance(r, dict) and r.get("access_token"):
+        return True, "ok"
+    desc = (r.get("error_description") or r.get("error") or "") if isinstance(r, dict) else str(r)[:200]
+    return False, desc
+
+
 def setup_tiktok(client_key: str, client_secret: str, port: int = 8765):
     verifier, challenge = _pkce(hex_challenge=True)   # TikTok's desktop PKCE uses a hex SHA-256 challenge
     state = secrets.token_urlsafe(16)
