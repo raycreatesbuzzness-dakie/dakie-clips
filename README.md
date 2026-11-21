@@ -38,6 +38,8 @@ and hashtags for each platform.
    suggestions for hashtag and title research.
 
 ## Install (macOS)
+> **New to Claude Code?** The [complete step-by-step setup guide](https://docs.google.com/document/d/1oPoG1lSRmPlQexEc17znUO2eUi8b0gNv7xgJF3cJSqI/edit?usp=sharing) (Google Doc) covers everything from getting Claude Pro and the Claude app to connecting your YouTube, Instagram, Facebook and TikTok accounts.
+
 **You need:** a Mac (tested on Apple Silicon; Windows and Linux are not supported),
 [Claude Code](https://claude.com/claude-code) (the Claude desktop app's Code tab or the `claude`
 terminal app), and about 3 GB of free disk space. No Homebrew or admin password is needed:
