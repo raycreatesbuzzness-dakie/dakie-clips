@@ -175,6 +175,17 @@ def package(proj: Path, n: int) -> Path:
     d = clip_dir(proj, n)
     meta = read_json(d / "meta.json")
     rend = read_json(d / "render.json")
+    # CC BY press footage: its credit line must appear in every platform's text
+    from . import press as _press
+    pc = rend.get("press_clip", {})
+    credit = pc.get("credit") or next((e.get("credit") for e in _press.library() if e["file"] == pc.get("file")), None)
+    if credit:
+        line = f"🎬 Press footage: {credit}"
+        for plat, key in (("youtube", "description"), ("tiktok", "caption"), ("instagram", "caption"), ("facebook", "caption")):
+            m = meta.get(plat)
+            if m and credit not in m.get(key, ""):
+                m[key] = (m.get(key, "").rstrip() + "\n" + line).strip()
+        write_json(d / "meta.json", meta)
     prep = read_json(d / "prep.json")
     warns = validate(meta, info) + hashtag_checks(proj, n, meta)
 
@@ -189,7 +200,8 @@ def package(proj: Path, n: int) -> Path:
                  + (f"possible music (loud audio, no speech) at {', '.join(mr)} of the clip. "
                     "Listen to these spots; licensed music or GTA radio triggers Content ID/TikTok mutes." if mr
                     else "no music-like stretches detected (still listen for in-game radio)."))
-    lines.append(f"- 🟢 **Top panel:** {rend['press_clip']['file']}: {rend['press_clip']['license']}")
+    lines.append(f"- 🟢 **Top panel:** {rend['press_clip']['file']}: {rend['press_clip']['license']}"
+                 + (f" (credit added to every description: {credit})" if credit else ""))
     lib = {e["name"]: e for e in sfx.library()}
     used = sorted({c["name"] for c in rend["sfx_used"]})
     lic = [f"{u} ({lib.get(u, {}).get('license', 'UNKNOWN')})" for u in used]

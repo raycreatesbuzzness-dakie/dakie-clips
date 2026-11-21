@@ -57,6 +57,7 @@ def main(argv=None):
     p.add_argument("action", choices=["list", "add", "remove", "enable", "disable", "priority", "generate"])
     p.add_argument("args", nargs="*"); p.add_argument("--license"); p.add_argument("--source", default="")
     p.add_argument("--name"); p.add_argument("--priority", type=int, default=8)
+    p.add_argument("--credit", help="attribution line for CC BY footage, added to every clip's description")
     p.add_argument("--seed", type=int); p.add_argument("--count", type=int, default=1)
     a = ap.parse_args(argv)
 
@@ -158,7 +159,7 @@ def main(argv=None):
             if not a.args or not a.license:
                 sys.exit("usage: dakie press add <file|folder> [...] --license LICENSE [--source URL] "
                          "[--priority 1-10] [--name NAME]")
-            press.add(a.args, a.license, a.source, a.priority, a.name)
+            press.add(a.args, a.license, a.source, a.priority, a.name, a.credit)
         elif a.action in ("remove", "enable", "disable", "priority"):
             if not a.args:
                 sys.exit(f"usage: dakie press {a.action} <file>" + (" --priority N" if a.action == "priority" else ""))

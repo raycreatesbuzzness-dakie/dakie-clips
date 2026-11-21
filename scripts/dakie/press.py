@@ -223,10 +223,13 @@ def _expand(paths) -> list[Path]:
     return out
 
 
-def add(paths, license_: str, source: str = "", priority: int = 8, name: str | None = None):
+def add(paths, license_: str, source: str = "", priority: int = 8, name: str | None = None,
+        credit: str | None = None):
     """Add one or more videos (or folders of videos). Each is converted to 1080p/30fps, no audio."""
     if not license_ or license_.lower() in ("unknown", "?"):
         raise SystemExit("A license is required (e.g. 'Pexels License', 'Pixabay Content License', 'CC0', 'Own footage').")
+    if re.search(r"\bCC[ -]?BY\b|attribution", license_, re.I) and not credit:
+        raise SystemExit("This license requires attribution: add --credit \"<creator> (CC BY) <url>\".")
     files = _expand(paths)
     if not files:
         raise SystemExit("No video files found.")
@@ -245,6 +248,7 @@ def add(paths, license_: str, source: str = "", priority: int = 8, name: str | N
                         "-t", "120", "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
                         str(dest)], check=True)
         lib[dest.name] = {"file": dest.name, "license": license_, "source": source or str(f),
+                          **({"credit": credit} if credit else {}),
                           "enabled": True, "priority": priority}
         print(f"Added {dest.name} ({min(dur, 120):.0f}s)")
     save(list(lib.values()))

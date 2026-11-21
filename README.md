@@ -125,6 +125,17 @@ dakie press disable <file>           # keep it but stop using it (enable to undo
 dakie press remove <file>
 ```
 
+Creative Commons Attribution (CC BY) footage, such as YouTube videos whose license line says "Creative
+Commons Attribution", needs a credit, which every clip that uses it then gets in its descriptions:
+
+```bash
+dakie press add clip.mp4 --license "Creative Commons Attribution (CC BY), via YouTube" \
+  --source "https://www.youtube.com/watch?v=..." --credit "Channel Name (CC BY), https://www.youtube.com/watch?v=..."
+```
+
+Only use CC BY videos the uploader clearly made themselves; re-uploads of other channels' press videos
+often carry a CC label they had no right to give.
+
 Videos are converted to 1080p, 30 fps, without audio when added. You need at least as many enabled
 press videos as clips you edit per stream (10); the installer creates 8 generated loops to start.
 

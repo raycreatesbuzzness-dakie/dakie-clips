@@ -127,6 +127,10 @@ the copyright checklist can name where each element came from.
   - `dakie press list`: all videos with on/off, priority (higher is picked first) and license
   - `dakie press add <file|folder> [...] --license "Pexels License" --source <url> [--priority 1-10]`:
     converts to 1080p/30 fps without audio and makes it available for the next renders
+  - CC BY footage (e.g. YouTube videos marked "Creative Commons Attribution") also needs
+    `--credit "<creator> (CC BY), <url>"`; `dakie package` then adds "🎬 Press footage: <credit>" to every
+    platform's text automatically. Only use CC BY videos the uploader clearly made themselves (their own
+    workshop, their own AI generations); re-uploads of other channels' footage carry a fake CC label.
   - `dakie press generate --count N`: N more original animated loops (8 color themes) that Dakie owns
   - `dakie press disable|enable <file>`, `dakie press priority <file> --priority N`,
     `dakie press remove <file>`
