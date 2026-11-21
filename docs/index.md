@@ -14,5 +14,5 @@ own YouTube, Instagram, Facebook and TikTok accounts through each platform's off
 after the user approves each upload plan.
 
 - Source code, install guide and documentation: [github.com/raycreatesbuzzness-dakie/dakie-clips](https://github.com/raycreatesbuzzness-dakie/dakie-clips)
-- [Privacy policy](privacy/)
+- [Privacy policy](privacy/) · [Terms of service](terms/)
 - Questions or problems: [open an issue](https://github.com/raycreatesbuzzness-dakie/dakie-clips/issues)
