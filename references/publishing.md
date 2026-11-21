@@ -37,6 +37,15 @@ dakie publish status
    - You'll see a "Google hasn't verified this app" screen when you sign in. That's expected for a
      personal app: click **Advanced → Go to Dakie Clips (unsafe)**. It's your own app.
 4. **Clients → Create client → Application type: Desktop app** → **Create** → **Download JSON**.
+   - If you made a **Web application** client instead, that works too: open it, add the
+     **Authorized redirect URI** `http://127.0.0.1:8765` (exactly, no slash at the end), and **Save**.
+   - Don't reuse a client made for another service (e.g. Composio). Its redirect addresses point elsewhere,
+     and Google shows `redirect_uri_mismatch`.
+   - **No domain needed for step 3:** Google wants a homepage and privacy-policy link before you can
+     publish the app. You can use this project's free pages:
+     `https://raycreatesbuzzness-dakie.github.io/dakie-clips/` and `.../dakie-clips/privacy/`, with
+     authorized domain `raycreatesbuzzness-dakie.github.io`, or turn on GitHub Pages for your own fork
+     (Settings → Pages → Branch `main`, folder `/docs`).
 5. In Terminal:
    ```bash
    dakie publish setup youtube --client-secret-file ~/Downloads/client_secret_XXXX.json

@@ -169,8 +169,13 @@ def setup_youtube(client_secret_file: str, port: int = 8765):
     cs = json.loads(Path(client_secret_file).expanduser().read_text())
     app = cs.get("installed") or cs.get("web")
     if not app:
-        raise SystemExit("That file isn't a Google OAuth client. Download it from Google Cloud > Credentials "
-                         "(application type: Desktop app).")
+        raise SystemExit("That file isn't a Google OAuth client. Google Cloud > Google Auth Platform > Clients > "
+                         "Create client > Application type: Desktop app > Download JSON.")
+    if "web" in cs:   # web clients only work if this exact address is registered on the client
+        print(f"Note: this is a 'Web application' client. In Google Cloud > Clients > this client, the "
+              f"Authorized redirect URIs must include exactly:  http://127.0.0.1:{port}\n"
+              "(If Google shows 'redirect_uri_mismatch', add it there, Save, wait a minute, and run setup again.)",
+              file=sys.stderr)
     verifier, challenge = _pkce()
     state = secrets.token_urlsafe(16)
     redirect = f"http://127.0.0.1:{port}"

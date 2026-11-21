@@ -128,7 +128,8 @@ def main(argv=None):
             import getpass
             which = (a.args or [""])[0]
             if which == "youtube":
-                f = a.client_secret_file or input("Path to the Google OAuth client JSON (Desktop app): ").strip()
+                f = a.client_secret_file or input("Path to the Google OAuth client JSON (Desktop app): ")
+                f = f.strip().strip("'\"").replace("\\ ", " ")   # accept drag-and-drop paths
                 pub.setup_youtube(f, a.port)
             elif which in ("meta", "instagram", "facebook"):
                 app_id = input("Meta App ID: ").strip()
