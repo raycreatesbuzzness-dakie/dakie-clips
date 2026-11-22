@@ -180,7 +180,9 @@ def main(argv=None):
             if not a.args or not a.approve:
                 sys.exit("usage: dakie publish run <project> --approve <plan id>   "
                          "(only after the plan was reviewed and approved)")
-            pub.run_plan(project_dir(a.args[0]), a.approve, a.force)
+            pub.run_plan(project_dir(a.args[0]), a.approve, a.force,
+                         only_platforms=[p.strip() for p in a.platforms.split(",") if p.strip()] or None,
+                         only_clips=[c.strip() for c in a.clips.split(",") if c.strip()] or None)
     elif a.cmd == "keywords":
         from .meta import keyword_suggestions
         for ph in a.phrases:

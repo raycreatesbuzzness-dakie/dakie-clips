@@ -541,7 +541,9 @@ def plan_markdown(plan: dict) -> str:
     return "\n".join(out)
 
 
-def run_plan(proj: Path, approve: str, force=False) -> list[dict]:
+def run_plan(proj: Path, approve: str, force=False, only_platforms=None, only_clips=None) -> list[dict]:
+    """Run an approved plan. only_platforms / only_clips narrow it to a subset (e.g. a retry);
+    they can never add anything that isn't already in the approved plan."""
     final = proj / "final"
     if not (final / "publish_plan.json").exists():
         raise SystemExit("No upload plan yet. Run: dakie publish plan <project>")
@@ -556,6 +558,9 @@ def run_plan(proj: Path, approve: str, force=False) -> list[dict]:
     done = {(e["clip"], e["platform"]) for e in log if e.get("ok")}
     results = []
     for item in plan["items"]:
+        if (only_platforms and item["platform"] not in only_platforms) or \
+                (only_clips and str(item["clip"]) not in only_clips):
+            continue
         key = (item["clip"], item["platform"])
         if key in done and not force:
             print(f"clip {item['clip']} → {item['platform']}: already published, skipped")

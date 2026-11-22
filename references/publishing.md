@@ -108,6 +108,7 @@ e.g. "upload clips 1–5 to YouTube and TikTok". Under the hood:
 ```bash
 dakie publish plan <project> [--clips 1,2,3] [--platforms youtube,instagram,facebook,tiktok]
 dakie publish run <project> --approve <plan id>      # only after you approved that ID
+dakie publish run <project> --approve <plan id> --platforms tiktok   # retry just part of an approved plan
 ```
 
 - Turn a platform off or on: `dakie publish disable tiktok` / `dakie publish enable tiktok`
