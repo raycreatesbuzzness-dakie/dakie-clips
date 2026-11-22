@@ -116,6 +116,12 @@ def _check(status, resp, what):
         msg = err.get("message") if isinstance(err, dict) else str(err)
         if isinstance(resp, dict) and resp.get("error_description"):     # OAuth-style errors (TikTok, Google)
             msg = f"{msg}: {resp['error_description']}"
+        if isinstance(resp, dict) and isinstance(resp.get("debug_info"), dict):  # Meta upload servers
+            d = resp["debug_info"]
+            msg = f"{d.get('type')}: {d.get('message')}"
+        if "spam_risk_too_many_pending_share" in str(msg):
+            msg = ("TikTok allows only about 5 unposted drafts from an app. Post or delete the Dakie Clips "
+                   "drafts in your TikTok inbox, then run the same plan again")
         raise RuntimeError(f"{what} failed (HTTP {status}): {str(msg)[:400]}")
     return resp
 
@@ -306,11 +312,22 @@ def upload_instagram(item: dict) -> dict:
         raise RuntimeError("The Meta login expired (they last 60 days). Run: dakie publish setup meta")
     token, ig = acc["user_token"], acc["ig_user_id"]
     video = Path(item["file"]).read_bytes()
-    st, c, _ = _http("POST", _graph(f"{ig}/media"), params={
-        "media_type": "REELS", "upload_type": "resumable", "caption": item["caption"][:2200],
-        "share_to_feed": str(item.get("share_to_feed", True)).lower(), "access_token": token})
-    _check(st, c, "Creating the Instagram Reel")
-    _rupload(c["uri"], token, video, "Uploading the video to Instagram")
+    # Instagram's upload server sometimes answers ProcessingFailedError for a good file; a fresh
+    # container usually works, so try a few times before giving up.
+    for attempt in range(1, 4):
+        st, c, _ = _http("POST", _graph(f"{ig}/media"), params={
+            "media_type": "REELS", "upload_type": "resumable", "caption": item["caption"][:2200],
+            "share_to_feed": str(item.get("share_to_feed", True)).lower(), "access_token": token})
+        _check(st, c, "Creating the Instagram Reel")
+        try:
+            _rupload(c["uri"], token, video, "Uploading the video to Instagram")
+            break
+        except RuntimeError as e:
+            if attempt == 3 or "ProcessingFailedError" not in str(e):
+                raise RuntimeError(f"{e} (tried {attempt}x; Instagram's servers rejected the upload. "
+                                   "Try again later, or post this clip from the Instagram app)") from None
+            print(f"   Instagram rejected the upload (attempt {attempt}/3), retrying in 30 s...", file=sys.stderr)
+            time.sleep(30)
     for _ in range(60):                      # processing usually takes 20-90 s
         st, s, _ = _http("GET", _graph(c["id"]), params={"fields": "status_code,status", "access_token": token})
         code = s.get("status_code") if isinstance(s, dict) else None
