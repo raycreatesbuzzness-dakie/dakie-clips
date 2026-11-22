@@ -73,12 +73,30 @@ def ensure_home() -> None:
         CONFIG_PATH.write_text(json.dumps(DEFAULT_CONFIG, indent=2))
 
 
+_FFMPEG = None
+
+
+def _has_libass(exe: str) -> bool:
+    try:
+        out = subprocess.run([exe, "-hide_banner", "-filters"], capture_output=True, text=True, timeout=20).stdout
+    except Exception:
+        return False
+    return any(line.split()[1:2] == ["ass"] for line in out.splitlines() if line.strip())
+
+
 def ffmpeg() -> str:
+    """An ffmpeg that can burn in captions (libass). A system ffmpeg (e.g. Homebrew's) is used only
+    if it has the `ass` filter; otherwise the bundled imageio-ffmpeg build, which always does."""
+    global _FFMPEG
+    if _FFMPEG:
+        return _FFMPEG
     found = shutil.which("ffmpeg")
-    if found:
-        return found
-    import imageio_ffmpeg
-    return imageio_ffmpeg.get_ffmpeg_exe()
+    if found and _has_libass(found):
+        _FFMPEG = found
+    else:
+        import imageio_ffmpeg
+        _FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
+    return _FFMPEG
 
 
 def venv_bin(name: str) -> str:

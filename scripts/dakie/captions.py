@@ -69,7 +69,8 @@ def _wrap_hook(text: str, cfg) -> tuple[list[str], int, int]:
     glue = lambda t: re.sub(r"\b(GTA|Part|No\.?|\$)\s+(\d+|VI|V)\b", "\\1\u00a0\\2", t, flags=re.I)
     lines = []
     for para in re.split(r"\\N|\n", glue(text)):
-        words, cur, para_lines = para.split(), "", []
+        # split on ordinary spaces only: str.split() would also break the glued "GTA 6"
+        words, cur, para_lines = [w for w in re.split(r"[ \t]+", para.strip()) if w], "", []
         for word in words:
             trial = f"{cur} {word}".strip()
             if cur and width(trial) > cfg["hook_max_width"]:
