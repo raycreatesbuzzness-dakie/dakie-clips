@@ -51,4 +51,6 @@ Record a 1–2 minute screen recording (QuickTime → New Screen Recording) show
 3. `dakie publish plan <project> --platforms tiktok`: the plan with account name, privacy,
    comments/Duet/Stitch, the full caption and the Music Usage Confirmation.
 4. Approving the plan ID and `dakie publish run …`, then the post appearing on the TikTok profile.
-Use the Sandbox app for the recording; posts will be "Only me" there, which is expected.
+Use the Sandbox app for the recording; posts will be "Only me" there, which is expected. Before
+approval TikTok only accepts Direct Post to a **private account**: switch the TikTok account to private
+(Settings and privacy → Privacy → Private account) just for the recording, then switch it back.

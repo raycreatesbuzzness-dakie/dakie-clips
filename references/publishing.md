@@ -13,7 +13,7 @@ ID. Every upload is logged, so the same clip is never posted twice.
 | YouTube Shorts | Uploaded with title, description, tags; public, unlisted or private (your choice) | ~10 min (Google Cloud) |
 | Instagram Reels | Posted with caption and hashtags | ~15 min (Meta app, shared with Facebook) |
 | Facebook Reels | Posted to your Facebook Page with caption | same Meta app |
-| TikTok | **Direct Post** to your profile with caption and hashtags. Private ("Only me") until TikTok approves your app, then public | ~15 min (TikTok developer app) + TikTok's app review for public posts |
+| TikTok | **Direct Post** to your profile with caption and hashtags once TikTok approves your app; until then your drafts (or "Only me" posts if your TikTok account is private) | ~15 min (TikTok developer app) + TikTok's app review for public posts |
 
 Logins are saved in `~/DakieClips/accounts/` (readable only by your Mac user, never uploaded to GitHub).
 **Run the setup commands yourself in Terminal.** They ask for secrets at a hidden prompt; never paste
@@ -98,8 +98,10 @@ caption, hashtags and SEO text. Before posting, Dakie Clips checks your TikTok a
 privacy options TikTok offers you, whether you turned off comments/Duet/Stitch) and shows it all in
 the upload plan, together with TikTok's Music Usage Confirmation, which you accept by approving the plan.
 
-**Private until TikTok approves your app.** TikTok only lets unreviewed apps post as "Only me". Until
-then: open each new post in TikTok → ⋯ → Privacy settings → **Everyone**. To get public posting:
+**Until TikTok approves your app**, TikTok only allows Direct Post when your whole TikTok **account is
+private**, and posts arrive as "Only me". With a public account, Dakie Clips automatically sends each
+approved clip to your TikTok **drafts** instead (open the notification, paste the caption it shows,
+choose Everyone, Post). To get fully automatic public posting:
 1. In the developer portal, switch to **Production** and submit the app for review (the answers are in
    `references/tiktok-audit.md`; TikTok wants a short screen recording of the upload plan and a post).
 2. When TikTok approves it, run:

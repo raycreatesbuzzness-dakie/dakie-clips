@@ -119,6 +119,9 @@ def _check(status, resp, what):
                          and not (isinstance(resp["error"], dict) and resp["error"].get("code") in ("ok", 0))):
         err = resp.get("error") if isinstance(resp, dict) else resp
         msg = err.get("message") if isinstance(err, dict) else str(err)
+        if isinstance(err, dict) and err.get("code") and str(err.get("code")) not in ("ok", "0") \
+                and str(err["code"]) not in str(msg):
+            msg = f"{err['code']}: {msg}"
         if isinstance(resp, dict) and resp.get("error_description"):     # OAuth-style errors (TikTok, Google)
             msg = f"{msg}: {resp['error_description']}"
         if isinstance(resp, dict) and isinstance(resp.get("debug_info"), dict):  # Meta upload servers
@@ -494,11 +497,24 @@ def upload_tiktok(item: dict) -> dict:
     s = tiktok_post_settings(publish_config(), tiktok_creator_info())
     if s["privacy_level"] != item["privacy_level"]:
         raise RuntimeError("Your TikTok privacy options changed since you approved the plan; make a new plan.")
-    pid = _tiktok_send(token, "/v2/post/publish/video/init/", video, {
-        "title": item["caption"][:2200], "privacy_level": item["privacy_level"],
-        "disable_comment": item["disable_comment"], "disable_duet": item["disable_duet"],
-        "disable_stitch": item["disable_stitch"], "video_cover_timestamp_ms": 1500,
-        "brand_content_toggle": False, "brand_organic_toggle": False})
+    try:
+        pid = _tiktok_send(token, "/v2/post/publish/video/init/", video, {
+            "title": item["caption"][:2200], "privacy_level": item["privacy_level"],
+            "disable_comment": item["disable_comment"], "disable_duet": item["disable_duet"],
+            "disable_stitch": item["disable_stitch"], "video_cover_timestamp_ms": 1500,
+            "brand_content_toggle": False, "brand_organic_toggle": False})
+    except RuntimeError as e:
+        if "unaudited_client_can_only_post_to_private_accounts" not in str(e):
+            raise
+        # Before TikTok approves the app, Direct Post only works when the whole TikTok account is
+        # private. Send it to the drafts instead (nothing is published that way), so the approved
+        # upload still arrives.
+        pid = _tiktok_send(token, "/v2/post/publish/inbox/video/init/", video, None)
+        return {"id": pid, "url": "",
+                "note": ("TikTok only allows Direct Post to private accounts until it approves your app, so this "
+                         "clip went to your TikTok drafts instead: open the notification, paste the caption below, "
+                         "choose Everyone, Post."),
+                "caption_to_paste": item["caption"]}
     for _ in range(60):                              # processing usually takes 10-60 s
         time.sleep(5)
         st, r, _ = _http("POST", BASES["tiktok_api"] + "/v2/post/publish/status/fetch/",
@@ -544,7 +560,7 @@ def _tiktok_label(tc: dict) -> str:
     if tc.get("mode", "direct") == "inbox":
         return "lands in your TikTok drafts"
     if not tc.get("audited"):
-        return "Direct Post, private (Only me) until TikTok approves your app"
+        return "Direct Post once TikTok approves your app; until then drafts (or Only me on a private account)"
     return f"Direct Post, {tc.get('privacy') or 'choose privacy: dakie publish privacy tiktok …'}"
 
 
