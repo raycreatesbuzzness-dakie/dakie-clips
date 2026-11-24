@@ -16,16 +16,26 @@ SFX_DIR = HOME / "sfx_library"
 PRESS_DIR = HOME / "press_library"
 CONFIG_PATH = HOME / "config.json"
 
+CONFIG_VERSION = 2
 DEFAULT_CONFIG = {
-    "target_duration": 58.0,           # seconds; default length of each finished clip
-    "min_duration": 50.0,              # a plan may set "duration" anywhere in this range
-    "max_duration": 60.0,              # <= 60 s keeps every clip a Short/Reel on all four platforms
+    "config_version": CONFIG_VERSION,
+    "target_duration": 28.0,           # seconds; default length of each finished clip
+    "min_duration": 20.0,              # a plan may set "duration" anywhere in this range
+    "max_duration": 30.0,              # short, punchy clips: one moment, payoff, done
     "width": 1080,
     "height": 1920,
     "fps": 30,
-    # Layout (matches Dakie's sample: press 45% on top, gameplay 55% below)
-    "top_ratio": 0.45,                 # share of height used by the hydraulic press panel
-    "facecam_width": 420,              # px width of the streamer cam box (~39% of the frame)
+    # Layout. "cam_top" (v2, Dakie's current sample): streamer's webcam fills the top panel, gameplay
+    # below, hydraulic press in a small window bottom-right. "press_top" (v1): press on top, gameplay
+    # below, webcam box bottom-right.
+    "layout": "cam_top",
+    "top_ratio": 0.32,                 # share of height used by the top panel (webcam in cam_top)
+    "press_inset_width": 470,          # cam_top: px size of the press window, bottom-right
+    "press_inset_height": 290,
+    "press_inset_margin_right": 40,
+    "press_inset_margin_bottom": 40,
+    "press_inset_border": 0,
+    "facecam_width": 420,              # press_top: px width of the streamer cam box
     "facecam_margin_right": 24,
     "facecam_margin_bottom": 52,
     "facecam_border": 4,
@@ -59,10 +69,24 @@ DEFAULT_CONFIG = {
 }
 
 
+# keys whose defaults changed in config v2 (20-30 s clips, webcam-on-top layout); an older config.json
+# gets these reset once, everything else the user set is kept
+_V2_KEYS = ("target_duration", "min_duration", "max_duration", "layout", "top_ratio", "press_inset_width",
+            "press_inset_height", "press_inset_margin_right", "press_inset_margin_bottom", "press_inset_border")
+
+
 def load_config() -> dict:
     cfg = dict(DEFAULT_CONFIG)
     if CONFIG_PATH.exists():
-        cfg.update(json.loads(CONFIG_PATH.read_text()))
+        user = json.loads(CONFIG_PATH.read_text())
+        if user.get("config_version", 1) < CONFIG_VERSION:
+            for k in _V2_KEYS:
+                user[k] = DEFAULT_CONFIG[k]
+            user["config_version"] = CONFIG_VERSION
+            CONFIG_PATH.write_text(json.dumps(user, indent=2))
+            print("config.json updated to v2: 20-30 s clips, webcam-on-top layout "
+                  "(set \"layout\": \"press_top\" for the old one)", file=sys.stderr)
+        cfg.update(user)
     return cfg
 
 

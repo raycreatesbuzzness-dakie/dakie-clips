@@ -194,6 +194,9 @@ def render(proj: Path, n: int) -> Path:
     fc.append("".join(f"[v{i}][a{i}]" for i in range(nseg)) + f"concat=n={nseg}:v=1:a=1[bv][ba]")
 
     cam = face.get("mode") == "overlay"
+    if cfg.get("layout", "cam_top") == "cam_top":
+        return _render_cam_top(d, n, cfg, plan, face, segs, cues, zooms, sw, anchor, pr, inputs, fc, td,
+                               W, H, Ht, Hb, D, FPS)
     fc.append("[bv]split=2[gsrc][fsrc]" if cam else "[bv]null[gsrc]")
     # where the stream shows the camera full-screen (plan "cam_off"), people sit in the middle of the
     # frame, so the crop goes back to centre there; elsewhere it avoids the original webcam overlay
@@ -259,6 +262,96 @@ def render(proj: Path, n: int) -> Path:
         fc.append(f"color=c=0xFFD400:s={W}x10:r={FPS}:d={D}[bar]")
         fc.append(f"[{last}][bar]overlay=x='-w+w*t/{D}':y={Ht - 5}:shortest=1[barred]")
         last = "barred"
+    return _finish(d, cfg, plan, face, fc, last, cues, inputs, pr, td, D, FPS)
+
+
+def _off_intervals(plan, segs):
+    """plan "cam_off" stretches (source seconds) -> output-time intervals."""
+    out = []
+    for ca, cb in plan.get("cam_off", []):
+        for a, b, o in segs:
+            lo, hi = max(a, ca), min(b, cb)
+            if hi > lo:
+                out.append((lo - a + o, hi - a + o))
+    return out
+
+
+def _render_cam_top(d, n, cfg, plan, face, segs, cues, zooms, sw, anchor, pr, inputs, fc, td,
+                    W, H, Ht, Hb, D, FPS):
+    """v2 layout: streamer's webcam fills the top panel, gameplay below, press video in a small
+    window bottom-right. Where there is no webcam overlay (cam_off stretches, or no cam found), the
+    top panel shows a tighter crop of the stream instead, so it never goes empty."""
+    cam = face.get("mode") == "overlay"
+    off = _off_intervals(plan, segs)
+    fc.append("[bv]split=3[gsrc][fsrc][asrc]")
+
+    # gameplay (bottom): same anchor logic as v1, so the original webcam overlay stays out of frame
+    gx = int((sw - W) * anchor)
+    cx_ = int((sw - W) * float(plan.get("cam_off_anchor", 0.5)))
+    gx_expr = (f"'if({'+'.join(f'between(t,{x:.2f},{y:.2f})' for x, y in off)},{cx_},{gx})'"
+               if off and gx != cx_ else str(gx))
+    game = f"[gsrc]scale={sw}:{Hb},crop={W}:{Hb}:{gx_expr}:0,setsar=1"
+    if zooms:
+        game += (f",zoompan=z='1+({_bump(zooms, 'in/' + str(FPS))})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+                 f":d=1:s={W}x{Hb}:fps={FPS}")
+    fc.append(game + "[game]")
+
+    # top fallback: the stream itself, cropped to the panel (used where there is no webcam)
+    SWs, SHs = video_size(d / "source.mp4")
+    fs = max(W / SWs, Ht / SHs)
+    aw, ah = int(round(SWs * fs / 2) * 2), int(round(SHs * fs / 2) * 2)
+    ax = int((aw - W) * float(plan.get("cam_off_anchor", 0.5)))
+    fc.append(f"[asrc]scale={aw}:{ah},crop={W}:{Ht}:{ax}:{(ah - Ht) // 2},setsar=1[talt]")
+
+    if cam:
+        A = W / Ht
+        bx, by, bw, bh = face["box"]
+        cw = int(min(bw, bh * A)) // 2 * 2
+        ch = int(cw / A) // 2 * 2
+        trk = face.get("track") or []
+        if trk:
+            def clampx(v):
+                return float(np.clip(v - cw / 2, bx, bx + bw - cw))
+
+            def clampy(v):
+                return float(np.clip(v - ch * 0.45, by, by + bh - ch))
+            kx, ky = [], []
+            for a, b, o in segs:
+                for t, x, y in trk:
+                    if a <= t <= b:
+                        kx.append((t - a + o, clampx(x)))
+                        ky.append((t - a + o, clampy(y)))
+            kx.sort()
+            ky.sort()
+            xe, ye = (_piecewise(kx), _piecewise(ky)) if kx else (str(bx + (bw - cw) / 2), str(by + (bh - ch) / 2))
+        else:   # static box: keep the head in frame (heads sit high in a webcam), trim the bottom instead
+            xe, ye = str(bx + (bw - cw) / 2), str(by + (bh - ch) * 0.15)
+        fc.append(f"[fsrc]crop={cw}:{ch}:x='{xe}':y='{ye}',scale={W}:{Ht}:flags=lanczos,setsar=1[tcam]")
+        if off:
+            cond = "+".join(f"between(t,{x:.2f},{y:.2f})" for x, y in off)
+            fc.append(f"[tcam][talt]overlay=0:0:enable='{cond}'[top]")
+        else:
+            fc.append("[talt]nullsink")
+            fc.append("[tcam]null[top]")
+    else:
+        fc.append("[fsrc]nullsink")
+        fc.append("[talt]null[top]")
+    fc.append("[top][game]vstack=inputs=2[stack]")
+
+    # press video window, bottom-right
+    pw, ph = int(cfg["press_inset_width"]) // 2 * 2, int(cfg["press_inset_height"]) // 2 * 2
+    bd = int(cfg.get("press_inset_border", 0))
+    press = (f"[1:v]scale={pw}:{ph}:force_original_aspect_ratio=increase,crop={pw}:{ph},fps={FPS},"
+             f"trim=0:{D},setpts=PTS-STARTPTS,setsar=1")
+    if bd:
+        press += f",pad={pw + 2 * bd}:{ph + 2 * bd}:{bd}:{bd}:color=white"
+    fc.append(press + "[press]")
+    fc.append(f"[stack][press]overlay=x={W - pw - 2 * bd - int(cfg['press_inset_margin_right'])}:"
+              f"y={H - ph - 2 * bd - int(cfg['press_inset_margin_bottom'])}:shortest=0[withpress]")
+    return _finish(d, cfg, plan, face, fc, "withpress", cues, inputs, pr, td, D, FPS)
+
+
+def _finish(d, cfg, plan, face, fc, last, cues, inputs, pr, td, D, FPS):
     fc.append(f"[{last}]ass=captions.ass:fontsdir=/System/Library/Fonts/Supplemental,format=yuv420p[vout]")
 
     # ---- audio: clean + level the stream audio, then lay SFX under it

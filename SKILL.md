@@ -1,6 +1,6 @@
 ---
 name: dakie-clips
-description: Dakie Clips. Turns a GTA 6 livestream link (YouTube, Twitch, Kick and other sites yt-dlp supports) into ten 50–60 second vertical short-form videos (hydraulic press on top, gameplay below, streamer cam bottom-right) with multi-color captions, hooks, sound effects, per-clip titles/descriptions/hashtags for four platforms, a copyright check, and approved uploads to YouTube, Instagram, Facebook and TikTok. Use whenever the user types `dakie_clips <url>` or `/dakie-clips <url>`, asks to clip, find highlights in, or make Shorts/TikToks/Reels from a stream, asks to upload or publish clips, or asks to add press videos or sound effects to the libraries.
+description: Dakie Clips. Turns a GTA 6 livestream link (YouTube, Twitch, Kick and other sites yt-dlp supports) into ten 20–30 second vertical short-form videos of the best and funniest moments (streamer's webcam on top, gameplay below, hydraulic press in a small window bottom-right) with multi-color captions, hooks, sound effects, per-clip titles/descriptions/hashtags for four platforms, a copyright check, and approved uploads to YouTube, Instagram, Facebook and TikTok. Use whenever the user types `dakie_clips <url>` or `/dakie-clips <url>`, asks to clip, find highlights in, or make Shorts/TikToks/Reels from a stream, asks to upload or publish clips, or asks to add press videos or sound effects to the libraries.
 argument-hint: <stream-url>
 ---
 
@@ -21,9 +21,13 @@ All commands use the `dakie` CLI (`~/.local/bin/dakie`; if that is not found, us
 Long steps (scan, prepare, render) must run with `run_in_background` and you wait for the
 completion notification. Never poll. Wrap long jobs in `caffeinate -i` so the Mac doesn't sleep.
 
-**Clip length:** every finished video is 50–60 seconds (`target_duration`, default 58 s; a plan can
-set `"duration"` anywhere from `min_duration` to `max_duration`). That keeps every clip a Short/Reel
-on YouTube, TikTok, Instagram and Facebook.
+**Clip length:** every finished video is **20–30 seconds** (`target_duration`, default 28 s; a plan can
+set `"duration"` anywhere from `min_duration` to `max_duration`). One moment per clip: the setup, the
+payoff, done. Each of the 10 clips is one of the best or funniest moments of the whole stream.
+
+**Layout (v2):** the streamer's webcam fills the top third (their reaction is the star), the gameplay
+fills the bottom, and the hydraulic press video plays in a small window in the bottom-right corner.
+The white title box sits on the seam with the captions just below it (see `references/editing.md`).
 
 ## Phase 0: Setup check
 Run `dakie doctor`. If anything is missing, run `~/.claude/skills/dakie-clips/install.sh` and then
@@ -56,8 +60,9 @@ Dakie they can add real footage with `dakie press add` (see "Managing libraries"
    chat, "bro", "oh my god", laughing). Skim the full transcript with
    `dakie text <project> 0 <end> --compact 60` (in chunks of about an hour) to catch funny dialogue,
    reactions, or storylines that the signals missed. Read each window closely with
-   `dakie text <project> <from> <to>` before you rank it, and set start/end so the payoff lands
-   inside the 50–60 s.
+   `dakie text <project> <from> <to>` before you rank it, and set start/end so the setup and payoff
+   both fit in 20–30 s. Favour the funniest moments and the strongest reactions: short clips live or
+   die on one laugh or one "NO WAY".
 4. Pick the **top 20** moments of the entire stream. Each must not overlap the others and must work
    as a self-contained short: hook in the first 3 seconds, payoff before the end.
    Prefer: chaos and police chases, unexpected glitches/physics, big wins or fails, funny
@@ -78,13 +83,14 @@ Dakie they can add real footage with `dakie press add` (see "Managing libraries"
 Number the approved clips 1–10 in the user's order (or by rank). For each clip:
 
 1. `dakie prepare <project> <n> <start> <end>` (background; chain all 10 with `&&` in one
-   `caffeinate -i sh -c "..."`). It downloads only that section (≥ 66 s so there is room for a
+   `caffeinate -i sh -c "..."`). It downloads only that section (≥ 36 s so there is room for a
    teaser) in ≤1080p, makes word-level captions with Whisper, finds the streamer's webcam overlay,
    and flags music-like audio. Read `clips/clip_NN/prep.json` afterwards.
 2. **Check the source layout** before planning: grab a frame timeline of `source.mp4` (every 5 s,
    tiled) and look at it. Fix `facecam.json` when needed:
    - the detected `box` must cover the **whole webcam overlay**, not just the face (measure it on a
-     full-resolution crop; set `"track": []` for a static crop of the overlay);
+     full-resolution crop; set `"track": []` for a static crop of the overlay). It becomes the whole
+     top panel, so a wrong box puts game UI or chat on top;
    - a camera-only clip (no gameplay) gets `"mode": "fullcam"` (no cam box);
    - if the layout switches mid-clip (camera full-screen → gameplay with overlay), add
      `"cam_off": [[start, end]]` to the plan for the camera-only stretch. After the box is right,
@@ -100,12 +106,15 @@ Number the approved clips 1–10 in the user's order (or by rank). For each clip
    `render.json` records which press video each clip used.
 6. **QA every render**: grab 3 frames (≈1 s, middle, ≈5 s before the end) with the ffmpeg binary
    from `dakie doctor`, tile them, and look with Read. Check that the title box fits on 2 lines,
-   captions sit on the seam and don't overflow, the cam box shows the streamer's face (not game UI
-   or an empty room), the gameplay crop isn't cutting the action, and the press footage is moving.
+   captions sit just below it and don't overflow, the top panel shows the streamer's face (not game UI
+   or an empty room), the gameplay crop isn't cutting the action, and the press window (bottom-right)
+   is moving and doesn't cover the key action.
    Also confirm the 10 `render.json` files list 10 different press videos. Fix and re-render.
 
 ## Phase 4: Metadata, copyright check, delivery
-1. For each clip, research and write `clips/clip_NN/meta.json` following `references/seo.md`:
+1. For each clip, research and write `clips/clip_NN/meta.json` following `references/seo.md` (house
+   style from Dakie's best Short: "<Streamer>'s GTA 6 <thing> went wrong 😭 #GTA6 #Shorts", a one-line
+   "...setup... payoff" description, `Streamer: @handle (url)`, 5 hashtags):
    run `dakie keywords "<2-4 word phrases about this clip>"` to see what people actually search, then
    write titles, descriptions and **hashtags specific to this clip's moment** (characters, places,
    actions, quotes, the streamer). No two clips may share the same hashtag set. Every platform text
@@ -147,7 +156,7 @@ Other settings: `dakie publish enable|disable <platform>`, `dakie publish privac
 Both libraries accept single files, several files, or whole folders. Every item needs a license so
 the copyright checklist can name where each element came from.
 
-- **Press videos** (top panel; each clip in a project gets a different one):
+- **Press videos** (bottom-right window; each clip in a project gets a different one):
   - `dakie press list`: all videos with on/off, priority (higher is picked first) and license
   - `dakie press add <file|folder> [...] --license "Pexels License" --source <url> [--priority 1-10]`:
     converts to 1080p/30 fps without audio and makes it available for the next renders

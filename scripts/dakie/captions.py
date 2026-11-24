@@ -108,7 +108,15 @@ def _rounded_rect(w: float, h: float, r: float) -> str:
 def build_ass(words, cfg, hook=None, cta=None, emphasis=(), duration=58.0) -> str:
     W, H = cfg["width"], cfg["height"]
     seam = int(H * cfg["top_ratio"])
-    cy = cfg["caption_y"] or seam
+    cam_top = cfg.get("layout", "cam_top") == "cam_top"
+    hook_box = _wrap_hook(hook["text"], cfg) if hook and hook.get("text") else None
+    if cam_top:
+        # v2: title box straddles the seam (mostly over the webcam), captions sit just below it on the
+        # gameplay, like Dakie's reference
+        over = int(hook_box[2] * 0.22) if hook_box else 0
+        cy = cfg["caption_y"] or int(seam + over + cfg.get("hook_gap", 22) + cfg["caption_size"] * 0.6)
+    else:
+        cy = cfg["caption_y"] or seam
     font, size = cfg["caption_font"], cfg["caption_size"]
     emph = {e.lower().strip(".,!?") for e in emphasis}
     head = f"""[Script Info]
@@ -162,9 +170,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             ev.append(f"Dialogue: 1,{_ass_time(c[0])},{_ass_time(c[1])},Cap,,0,0,0,,{c[2]}")
     if hook and hook.get("text"):
         hd = float(hook.get("duration") or duration)
-        lines, bw, bh = _wrap_hook(hook["text"], cfg)
-        # bottom edge sits just above the seam captions, like the reference layout
-        by = int(cy - cfg["caption_size"] * 0.6 - cfg.get("hook_gap", 22) - bh)
+        lines, bw, bh = hook_box
+        if cam_top:
+            by = seam + int(bh * 0.22) - bh          # ~78% above the seam, ~22% over the gameplay
+        else:
+            # v1: bottom edge sits just above the seam captions
+            by = int(cy - cfg["caption_size"] * 0.6 - cfg.get("hook_gap", 22) - bh)
         bx = (W - bw) // 2
         ev.append(f"Dialogue: 3,{_ass_time(0)},{_ass_time(hd)},Box,,0,0,0,,"
                   f"{{\\an7\\pos({bx},{by})\\fad(150,0)\\p1}}{_rounded_rect(bw, bh, cfg['hook_size'] * 0.7)}{{\\p0}}")
@@ -173,7 +184,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                   f"{{\\pos({W // 2},{by + bh // 2})\\fad(150,0)}}{txt}")
     if cta:
         ev.append(f"Dialogue: 3,{_ass_time(duration-3)},{_ass_time(duration)},Cta,,0,0,0,,"
-                  f"{{\\pos({W//2},{int(seam*0.3)})\\fad(200,0)}}{_esc(cta).upper()}")
+                  f"{{\\pos({W//2},{int(H * 0.70) if cam_top else int(seam*0.3)})\\fad(200,0)}}{_esc(cta).upper()}")
     return head + "\n".join(ev) + "\n"
 
 

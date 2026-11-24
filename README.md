@@ -2,7 +2,7 @@
 
 A [Claude Code](https://claude.com/claude-code) skill that turns a GTA 6 livestream (YouTube,
 Twitch, Kick and other sites [yt-dlp](https://github.com/yt-dlp/yt-dlp) supports) into ten
-50–60 second vertical clips for YouTube Shorts, TikTok, Instagram Reels and Facebook Reels.
+20–30 second vertical clips of the best and funniest moments for YouTube Shorts, TikTok, Instagram Reels and Facebook Reels.
 
 ```
 dakie_clips https://www.youtube.com/watch?v=...
@@ -13,14 +13,17 @@ Claude checks the stream's reuse rights, finds and ranks the 20 best moments of 
 and hashtags for each platform.
 
 ## What the videos look like
-- **Top 45%:** hydraulic press footage, a **different video for every clip** (licensed clips you add,
-  or original generated loops in 8 color themes)
-- **Bottom 55%:** the gameplay, with the streamer's webcam tracked and placed bottom-right
-- **Title** in a white rounded box for the whole video, e.g. "Speed meets his workmates at GTA 6!! Damn!"
-- **Word-by-word captions** on the seam between the panels, in multiple colors: the spoken word
+- **Top third:** the streamer's webcam, cropped from the stream and filling the width, so their
+  reaction is the star
+- **Bottom two thirds:** the gameplay
+- **Bottom-right corner:** a small hydraulic press window, a **different video for every clip**
+  (licensed clips you add, or original generated loops in 8 color themes)
+- **Title** in a white rounded box on the seam for the whole video, e.g. "Kai rates GTA 6 out of 10 after beating it"
+- **Word-by-word captions** just below the title, in multiple colors: the spoken word
   rotates yellow → cyan → pink → orange, key story words are coral red, numbers and money lime green
 - A short cold-open teaser of the payoff, zoom punch-ins, sound effects, audio leveled to −14 LUFS
-- 50–60 seconds (default 58), 1080×1920, 30 fps
+- 20–30 seconds (default 28), 1080×1920, 30 fps
+- The old layout (press on top, webcam box bottom-right) is still available: `"layout": "press_top"` in `~/DakieClips/config.json`
 
 ## How it works
 1. **Rights check** (`dakie init`): license, members-only/live status, "no clipping" or
@@ -126,7 +129,7 @@ Both libraries take single files, several files, or whole folders, and everythin
 available to the next edit. A license is required for every item, so each video's copyright
 checklist can list where each element came from.
 
-**Hydraulic press videos** (top panel; every clip in a project automatically gets a different one):
+**Hydraulic press videos** (bottom-right window; every clip in a project automatically gets a different one):
 
 ```bash
 dakie press add ~/Downloads/press1.mp4 ~/Downloads/press2.mp4 --license "Pexels License" --source https://www.pexels.com/video/...

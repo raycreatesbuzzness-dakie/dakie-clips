@@ -29,7 +29,7 @@ whenever the user asks whether a clip is "safe" or "owned".
 
 ## Platform-specific risks to report
 - **Content ID on Shorts:** YouTube blocks Shorts longer than 1 minute that have an active Content ID
-  claim. Our clips are 50–60 s, so a claim doesn't automatically block them, but the rights holder can
+  claim. Our clips are 20–30 s, so a claim doesn't automatically block them, but the rights holder can
   still mute, block or take the revenue from the Short. Keep clips at 60 s or less, and treat music
   risk as serious.
 - TikTok/Instagram/Facebook mute or remove videos with detected copyrighted audio; repeat

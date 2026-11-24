@@ -470,7 +470,8 @@ def _texts(meta: dict, plat: str) -> dict:
     m = meta.get(plat, {})
     tags = " ".join(m.get("hashtags", []))
     if plat == "youtube":
-        desc = m.get("description", "")
+        desc = m.get("description", "").rstrip()
+        desc += ("\n\n" + tags) if tags and tags not in desc else ""   # hashtag line at the bottom
         return {"title": m.get("title", ""), "description": desc, "tags": m.get("tags", [])}
     cap = m.get("caption", "")
     return {"caption": cap + (("\n\n" + tags) if tags and tags not in cap else "")}

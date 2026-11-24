@@ -169,12 +169,50 @@ def to_markdown(meta: dict, n: int) -> str:
 """
 
 
+def moment_url(proj: Path, n: int) -> str:
+    """Link to the exact moment of this clip in the source stream (YouTube &t=, Twitch ?t=)."""
+    info = read_json(proj / "info.json")
+    url = info.get("source_url") or info.get("webpage_url") or ""
+    d = clip_dir(proj, n)
+    try:
+        t = int(read_json(d / "prep.json")["source_start"] + float(read_json(d / "plan.json").get("main_start", 0)))
+    except Exception:
+        return url
+    if "youtube.com" in url or "youtu.be" in url:
+        return f"{url}{'&' if '?' in url else '?'}t={t}s"
+    if "twitch.tv" in url:
+        return f"{url}{'&' if '?' in url else '?'}t={t // 3600}h{t % 3600 // 60}m{t % 60}s"
+    return url
+
+
+def streamer_line(info: dict) -> str:
+    """'Streamer: @handle (channel URL)', the credit format of Dakie's best-performing Short."""
+    handle = str(info.get("uploader_id") or info.get("uploader") or info.get("channel") or "the streamer")
+    if not handle.startswith("@") and not handle.startswith("UC"):
+        handle = "@" + handle.replace(" ", "")
+    home = info.get("uploader_url") or info.get("channel_url") or info.get("source_url") or ""
+    return f"Streamer: {handle} ({home})" if home else f"Streamer: {handle}"
+
+
 def package(proj: Path, n: int) -> Path:
     info = read_json(proj / "info.json")
     rights = read_json(proj / "rights.json")
     d = clip_dir(proj, n)
     meta = read_json(d / "meta.json")
     rend = read_json(d / "render.json")
+    # credit block: "Streamer: @handle (url)" + "Clip: <link to the exact moment>" in every text
+    clip_line = f"Clip: {moment_url(proj, n)}"
+    for plat, key in (("youtube", "description"), ("tiktok", "caption"), ("instagram", "caption"), ("facebook", "caption")):
+        m = meta.get(plat)
+        if m and "Clip: " not in m.get(key, ""):
+            lines = m.get(key, "").rstrip().split("\n")
+            at = next((i for i, l in enumerate(lines) if "Streamer:" in l), None)
+            if at is None:
+                lines += ["", streamer_line(info), clip_line]
+            else:
+                lines.insert(at + 1, clip_line)
+            m[key] = "\n".join(lines)
+    write_json(d / "meta.json", meta)
     # CC BY press footage: its credit line must appear in every platform's text
     from . import press as _press
     pc = rend.get("press_clip", {})

@@ -6,7 +6,7 @@ permalink: /
 # Dakie Clips
 
 **Dakie Clips** is a free, open-source tool for [Claude Code](https://claude.com/claude-code) that turns
-GTA 6 livestreams into 50–60 second vertical clips for YouTube Shorts, TikTok, Instagram Reels and
+GTA 6 livestreams into 20–30 second vertical clips for YouTube Shorts, TikTok, Instagram Reels and
 Facebook Reels: moment ranking, editing, captions, sound effects, titles, hashtags and a copyright check.
 
 It runs entirely on the user's own computer. Optionally, it can upload finished clips to the user's
