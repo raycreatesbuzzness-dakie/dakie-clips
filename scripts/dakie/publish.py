@@ -652,6 +652,9 @@ def plan_markdown(plan: dict) -> str:
             else:
                 extra = " · to your drafts"
         out.append(f"- **Clip {i['clip']} → {i['platform']}**{extra}: {head}")
+        if i.get("tiktok_mode") == "direct":   # TikTok wants the full post text visible before consent
+            out.append("    - Caption as it will be posted:")
+            out += [f"      > {ln}" if ln else "      >" for ln in i["caption"].splitlines()]
         for f in i["flags"]:
             out.append(f"    - {f}")
     if any(i.get("tiktok_mode") == "direct" for i in plan["items"]):
