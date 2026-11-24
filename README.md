@@ -23,6 +23,8 @@ and hashtags for each platform.
   rotates yellow → cyan → pink → orange, key story words are coral red, numbers and money lime green
 - A short cold-open teaser of the payoff, zoom punch-ins, sound effects, audio leveled to −14 LUFS
 - 20–30 seconds (default 28), 1080×1920, 30 fps
+- No webcam in the stream: press on top, gameplay below. Camera only (no game on screen): press on top,
+  the streamer's camera below
 - The old layout (press on top, webcam box bottom-right) is still available: `"layout": "press_top"` in `~/DakieClips/config.json`
 
 ## How it works

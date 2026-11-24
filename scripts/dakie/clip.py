@@ -278,14 +278,22 @@ def _off_intervals(plan, segs):
 
 def _render_cam_top(d, n, cfg, plan, face, segs, cues, zooms, sw, anchor, pr, inputs, fc, td,
                     W, H, Ht, Hb, D, FPS):
-    """v2 layout: streamer's webcam fills the top panel, gameplay below, press video in a small
-    window bottom-right. Where there is no webcam overlay (cam_off stretches, or no cam found), the
-    top panel shows a tighter crop of the stream instead, so it never goes empty."""
+    """v2 layout. Which panel shows what depends on the stream:
+      - webcam overlay + gameplay (normal): webcam fills the top, gameplay below, press in a small
+        window bottom-right;
+      - no webcam (gameplay only): press fills the top, gameplay below, no corner window;
+      - camera only (facecam mode "fullcam", e.g. an IRL/just-chatting stream): press fills the top,
+        the streamer's camera below, no corner window.
+    "cam_off" stretches inside a normal clip (camera shown full-screen for a while) switch to the
+    press-on-top look for that stretch."""
     cam = face.get("mode") == "overlay"
-    off = _off_intervals(plan, segs)
-    fc.append("[bv]split=3[gsrc][fsrc][asrc]")
+    off = _off_intervals(plan, segs) if cam else []
+    fc.append("[bv]split=2[gsrc][fsrc]" if cam else "[bv]null[gsrc]")
 
-    # gameplay (bottom): same anchor logic as v1, so the original webcam overlay stays out of frame
+    # bottom: gameplay (or the camera, for camera-only streams). With a webcam overlay the crop
+    # avoids it (same anchor logic as v1); otherwise it centres on cam_off_anchor (default middle)
+    if not cam:
+        anchor = float(plan.get("cam_off_anchor", 0.5))
     gx = int((sw - W) * anchor)
     cx_ = int((sw - W) * float(plan.get("cam_off_anchor", 0.5)))
     gx_expr = (f"'if({'+'.join(f'between(t,{x:.2f},{y:.2f})' for x, y in off)},{cx_},{gx})'"
@@ -296,12 +304,15 @@ def _render_cam_top(d, n, cfg, plan, face, segs, cues, zooms, sw, anchor, pr, in
                  f":d=1:s={W}x{Hb}:fps={FPS}")
     fc.append(game + "[game]")
 
-    # top fallback: the stream itself, cropped to the panel (used where there is no webcam)
-    SWs, SHs = video_size(d / "source.mp4")
-    fs = max(W / SWs, Ht / SHs)
-    aw, ah = int(round(SWs * fs / 2) * 2), int(round(SHs * fs / 2) * 2)
-    ax = int((aw - W) * float(plan.get("cam_off_anchor", 0.5)))
-    fc.append(f"[asrc]scale={aw}:{ah},crop={W}:{Ht}:{ax}:{(ah - Ht) // 2},setsar=1[talt]")
+    # press video, prepared once and split into the full top panel and the small corner window
+    pw, ph = int(cfg["press_inset_width"]) // 2 * 2, int(cfg["press_inset_height"]) // 2 * 2
+    bd = int(cfg.get("press_inset_border", 0))
+    fc.append(f"[1:v]fps={FPS},trim=0:{D},setpts=PTS-STARTPTS,split=2[pr_a][pr_b]")
+    fc.append(f"[pr_a]scale={W}:{Ht}:force_original_aspect_ratio=increase,crop={W}:{Ht},setsar=1[ptop]")
+    inset = f"[pr_b]scale={pw}:{ph}:force_original_aspect_ratio=increase,crop={pw}:{ph},setsar=1"
+    if bd:
+        inset += f",pad={pw + 2 * bd}:{ph + 2 * bd}:{bd}:{bd}:color=white"
+    fc.append(inset + "[pinset]")
 
     if cam:
         A = W / Ht
@@ -329,25 +340,18 @@ def _render_cam_top(d, n, cfg, plan, face, segs, cues, zooms, sw, anchor, pr, in
         fc.append(f"[fsrc]crop={cw}:{ch}:x='{xe}':y='{ye}',scale={W}:{Ht}:flags=lanczos,setsar=1[tcam]")
         if off:
             cond = "+".join(f"between(t,{x:.2f},{y:.2f})" for x, y in off)
-            fc.append(f"[tcam][talt]overlay=0:0:enable='{cond}'[top]")
+            fc.append(f"[tcam][ptop]overlay=0:0:enable='{cond}'[top]")
+            inset_enable = f":enable='not({cond})'"
         else:
-            fc.append("[talt]nullsink")
+            fc.append("[ptop]nullsink")
             fc.append("[tcam]null[top]")
+            inset_enable = ""
+        fc.append("[top][game]vstack=inputs=2[stack]")
+        fc.append(f"[stack][pinset]overlay=x={W - pw - 2 * bd - int(cfg['press_inset_margin_right'])}:"
+                  f"y={H - ph - 2 * bd - int(cfg['press_inset_margin_bottom'])}{inset_enable}[withpress]")
     else:
-        fc.append("[fsrc]nullsink")
-        fc.append("[talt]null[top]")
-    fc.append("[top][game]vstack=inputs=2[stack]")
-
-    # press video window, bottom-right
-    pw, ph = int(cfg["press_inset_width"]) // 2 * 2, int(cfg["press_inset_height"]) // 2 * 2
-    bd = int(cfg.get("press_inset_border", 0))
-    press = (f"[1:v]scale={pw}:{ph}:force_original_aspect_ratio=increase,crop={pw}:{ph},fps={FPS},"
-             f"trim=0:{D},setpts=PTS-STARTPTS,setsar=1")
-    if bd:
-        press += f",pad={pw + 2 * bd}:{ph + 2 * bd}:{bd}:{bd}:color=white"
-    fc.append(press + "[press]")
-    fc.append(f"[stack][press]overlay=x={W - pw - 2 * bd - int(cfg['press_inset_margin_right'])}:"
-              f"y={H - ph - 2 * bd - int(cfg['press_inset_margin_bottom'])}:shortest=0[withpress]")
+        fc.append("[pinset]nullsink")
+        fc.append("[ptop][game]vstack=inputs=2[withpress]")
     return _finish(d, cfg, plan, face, fc, "withpress", cues, inputs, pr, td, D, FPS)
 
 

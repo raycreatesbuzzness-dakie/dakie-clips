@@ -27,6 +27,8 @@ payoff, done. Each of the 10 clips is one of the best or funniest moments of the
 
 **Layout (v2):** the streamer's webcam fills the top third (their reaction is the star), the gameplay
 fills the bottom, and the hydraulic press video plays in a small window in the bottom-right corner.
+Streams without a webcam get the press video on top and the gameplay below; camera-only streams (no
+game on screen) get the press video on top and the streamer's camera below.
 The white title box sits on the seam with the captions just below it (see `references/editing.md`).
 
 ## Phase 0: Setup check
@@ -91,7 +93,8 @@ Number the approved clips 1–10 in the user's order (or by rank). For each clip
    - the detected `box` must cover the **whole webcam overlay**, not just the face (measure it on a
      full-resolution crop; set `"track": []` for a static crop of the overlay). It becomes the whole
      top panel, so a wrong box puts game UI or chat on top;
-   - a camera-only clip (no gameplay) gets `"mode": "fullcam"` (no cam box);
+   - a camera-only clip (no gameplay, e.g. IRL/just chatting) gets `"mode": "fullcam"`: press on top,
+     the camera below; a stream with no webcam at all keeps `"mode": "none"`: press on top, gameplay below;
    - if the layout switches mid-clip (camera full-screen → gameplay with overlay), add
      `"cam_off": [[start, end]]` to the plan for the camera-only stretch. After the box is right,
      `dakie layout <project> <n>` prints a per-second overlay timeline and the suggested `cam_off`.

@@ -6,7 +6,12 @@
 - **Bottom 68%:** the gameplay.
 - **Bottom-right corner:** the hydraulic press video in a small window (`press_inset_*` in config).
 - **Title box** straddles the seam (mostly over the webcam); **captions** sit just below it on the gameplay.
-- No webcam in the stream (or `cam_off` stretches): the top panel shows a crop of the stream instead.
+- **No webcam in the stream** (gameplay only, facecam mode `none`): the press video fills the top,
+  gameplay below, no corner window.
+- **Camera only, no game on screen** (IRL / just-chatting style, facecam mode `fullcam`): the press video
+  fills the top and the streamer's camera fills the bottom, no corner window.
+- **`cam_off` stretches** inside a normal clip (the stream shows the camera full-screen for a while):
+  the same press-on-top look for that stretch, then back to webcam-on-top.
 - The v1 layout (press on top, webcam box bottom-right) is `"layout": "press_top"` in config.
 
 All times are **seconds from the start of the downloaded clip** (the times `dakie words` prints),
@@ -40,7 +45,7 @@ unless the key is `t_out` (seconds in the finished video).
 | `sfx` | 2–4 cues per clip, spaced ≥ 5 s apart. Use names from `dakie sfx list`, including sounds Dakie added. Vary the sounds across the 10 clips. |
 | `zooms` | 1–2 punch-ins on the gameplay at peak reactions. `amount` 0.12–0.25, `dur` 0.6–1.2 s. |
 | `cta` | Optional text for the last 3 s (keep it short; no "link in bio" for Shorts). |
-| `cam_off` | Optional `[[start, end], ...]` (clip seconds) where the stream has no webcam overlay (e.g. the camera is shown full-screen). There the top panel shows a crop of the stream instead of the webcam. Check a frame timeline of `source.mp4` during QA. |
+| `cam_off` | Optional `[[start, end], ...]` (clip seconds) where the stream has no webcam overlay (e.g. the camera is shown full-screen). There the press video fills the top panel and the corner window is hidden. Check a frame timeline of `source.mp4` during QA. |
 | `cam_off_anchor` | Where the crops point during `cam_off` stretches (and the top panel when no webcam exists): 0 = left, 0.5 = centre (default), 1 = right. Use it when the person who matters stands off-centre in the full-screen camera. |
 | `press_file` | Normally **leave it out**: the renderer gives each clip in the project its own press video, highest priority first (real footage before generated loops). Set it only to choose a specific free video; one already used by another clip is refused unless `"press_reuse": true`. |
 
