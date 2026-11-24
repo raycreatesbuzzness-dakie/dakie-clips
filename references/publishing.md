@@ -13,7 +13,7 @@ ID. Every upload is logged, so the same clip is never posted twice.
 | YouTube Shorts | Uploaded with title, description, tags; public, unlisted or private (your choice) | ~10 min (Google Cloud) |
 | Instagram Reels | Posted with caption and hashtags | ~15 min (Meta app, shared with Facebook) |
 | Facebook Reels | Posted to your Facebook Page with caption | same Meta app |
-| TikTok | Lands in your TikTok **inbox/drafts**; you tap the notification, paste the caption, choose Everyone, Post | ~15 min (TikTok developer app) |
+| TikTok | **Direct Post** to your profile with caption and hashtags. Private ("Only me") until TikTok approves your app, then public | ~15 min (TikTok developer app) + TikTok's app review for public posts |
 
 Logins are saved in `~/DakieClips/accounts/` (readable only by your Mac user, never uploaded to GitHub).
 **Run the setup commands yourself in Terminal.** They ask for secrets at a hidden prompt; never paste
@@ -77,23 +77,42 @@ Settings → Linked accounts → Instagram).
 5. The Instagram login lasts about **60 days**. `dakie publish status` warns a week before it expires;
    then repeat steps 3–4.
 
-## TikTok (free; clips go to your drafts)
+## TikTok (free; Direct Post)
 
 1. Go to **developers.tiktok.com**, log in, **Manage apps → Connect an app**.
-2. Add the products **Login Kit** and **Content Posting API**. Request the scopes
-   `user.info.basic` and `video.upload`.
+2. Add the products **Login Kit** and **Content Posting API**. Inside Content Posting API, turn on
+   **Direct Post**. Request the scopes `user.info.basic`, `video.upload` and `video.publish`.
 3. Platform **Desktop**; redirect URI: `http://localhost:8765/callback/`
-4. Until TikTok reviews your app, use **Sandbox**: add your own TikTok account under
-   **Sandbox → Target users**.
+4. Until TikTok reviews your app, use **Sandbox** (set it up the same way, including Direct Post and
+   `video.publish`), add your own TikTok account under **Sandbox → Target users**, and click
+   **Apply changes**.
 5. Note the **Client Key** and **Client Secret**, then in Terminal:
    ```bash
    dakie publish setup tiktok
    ```
-   Sign in to TikTok in the browser window that opens and allow access.
-6. After each upload you'll get a TikTok notification. Open it, paste the caption (Claude shows it,
-   and it's in `metadata.md`), choose **Everyone**, and post.
-   - Fully automatic TikTok posting needs TikTok's free app review (their **Direct Post** feature);
-     until then it stays this one-tap flow.
+   Sign in to TikTok in the browser window that opens and allow access (it now also asks to post videos).
+   Already connected before? Run it again once so the login gets the new `video.publish` permission.
+
+**What happens on upload:** each approved clip is posted straight to your profile with its full
+caption, hashtags and SEO text. Before posting, Dakie Clips checks your TikTok account (name, which
+privacy options TikTok offers you, whether you turned off comments/Duet/Stitch) and shows it all in
+the upload plan, together with TikTok's Music Usage Confirmation, which you accept by approving the plan.
+
+**Private until TikTok approves your app.** TikTok only lets unreviewed apps post as "Only me". Until
+then: open each new post in TikTok → ⋯ → Privacy settings → **Everyone**. To get public posting:
+1. In the developer portal, switch to **Production** and submit the app for review (the answers are in
+   `references/tiktok-audit.md`; TikTok wants a short screen recording of the upload plan and a post).
+2. When TikTok approves it, run:
+   ```bash
+   dakie publish tiktok audited yes
+   dakie publish privacy tiktok public        # or friends | followers | private
+   ```
+
+Other settings:
+```bash
+dakie publish tiktok comments off            # or on; also: duet on|off, stitch on|off
+dakie publish tiktok mode inbox              # old flow: send to your TikTok drafts instead
+```
 
 TikTok's developer site changes often. If a menu name differs, look for the same product names.
 

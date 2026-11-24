@@ -20,7 +20,7 @@ receives a login (an access token) for that account, limited to these permission
 |---|---|---|
 | YouTube (Google) | `youtube.upload`, `youtube.readonly` | Uploading clips you approve; showing your channel name so you can confirm the right account is connected |
 | Facebook / Instagram (Meta) | Page and Instagram content-publishing permissions | Posting clips you approve to your own Facebook Page and Instagram professional account |
-| TikTok | `user.info.basic`, `video.upload` | Sending clips you approve to your own TikTok drafts; showing your display name |
+| TikTok | `user.info.basic`, `video.upload`, `video.publish` | Posting clips you approve to your own TikTok profile (or drafts) with their captions; showing your display name and the privacy options TikTok offers you |
 
 The tool does **not** read, collect or analyse your other videos, comments, messages, viewers,
 analytics or any other account data.

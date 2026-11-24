@@ -23,7 +23,7 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-from .common import CONFIG_PATH, HOME, load_config, read_json, write_json
+from .common import CONFIG_PATH, HOME, load_config, media_duration, read_json, write_json
 
 ACCOUNTS = HOME / "accounts"
 PLATFORMS = ("youtube", "instagram", "facebook", "tiktok")
@@ -43,7 +43,12 @@ DEFAULT_PUBLISH = {
     "youtube": {"enabled": False, "privacy": "public", "category_id": "20"},   # 20 = Gaming
     "instagram": {"enabled": False, "share_to_feed": True},
     "facebook": {"enabled": False},
-    "tiktok": {"enabled": False, "mode": "inbox"},   # inbox = lands in your TikTok drafts to post from the app
+    # TikTok. mode "direct" = Direct Post: posted straight to your profile with the caption/hashtags filled
+    # in; until TikTok audits your developer app ("audited": false) TikTok only allows private ("Only
+    # me") posts. mode "inbox" = sent to your TikTok drafts to finish in the app (the v1 flow).
+    # privacy (used once audited): public | friends | followers | private; None = choose it first.
+    "tiktok": {"enabled": False, "mode": "direct", "audited": False, "privacy": None,
+               "allow_comment": True, "allow_duet": True, "allow_stitch": True},
     "offer_after_package": True,                     # Claude proposes an upload plan right after packaging
 }
 
@@ -374,7 +379,7 @@ def setup_tiktok(client_key: str, client_secret: str, port: int = 8765):
     state = secrets.token_urlsafe(16)
     redirect = f"http://localhost:{port}/callback/"
     url = BASES["tiktok_auth"] + "?" + urllib.parse.urlencode({
-        "client_key": client_key, "scope": "user.info.basic,video.upload", "response_type": "code",
+        "client_key": client_key, "scope": "user.info.basic,video.upload,video.publish", "response_type": "code",
         "redirect_uri": redirect, "state": state, "code_challenge": challenge, "code_challenge_method": "S256"})
     got = _browser_login(url, port)
     if got.get("state") != state:
@@ -407,17 +412,63 @@ def _tiktok_access(acc: dict) -> str:
     return acc["access_token"]
 
 
-def upload_tiktok(item: dict) -> dict:
+TIKTOK_PRIVACY = {"public": "PUBLIC_TO_EVERYONE", "friends": "MUTUAL_FOLLOW_FRIENDS",
+                  "followers": "FOLLOWER_OF_CREATOR", "private": "SELF_ONLY"}
+TIKTOK_PRIVACY_LABEL = {"PUBLIC_TO_EVERYONE": "Everyone", "MUTUAL_FOLLOW_FRIENDS": "Friends",
+                        "FOLLOWER_OF_CREATOR": "Followers", "SELF_ONLY": "Only me"}
+TIKTOK_MUSIC_URL = "https://www.tiktok.com/legal/page/global/music-usage-confirmation/en"
+
+
+def tiktok_creator_info() -> dict:
+    """Who the post goes to and what TikTok allows for them right now (required before every Direct Post)."""
     acc = _account("tiktok")
     token = _tiktok_access(acc)
-    video = Path(item["file"]).read_bytes()
+    st, r, _ = _http("POST", BASES["tiktok_api"] + "/v2/post/publish/creator_info/query/",
+                     headers={"Authorization": f"Bearer {token}"}, body={})
+    err = (r.get("error") or {}) if isinstance(r, dict) else {}
+    if st >= 400 or err.get("code") not in (None, "ok"):
+        code = err.get("code", "")
+        if "scope" in str(code) or "scope" in str(err.get("message", "")):
+            raise RuntimeError("TikTok Direct Post isn't allowed for this login yet: add the Direct Post product "
+                               "and the video.publish scope to your TikTok developer app, then run: "
+                               "dakie publish setup tiktok")
+        if code == "spam_risk_too_many_posts":
+            raise RuntimeError("TikTok's daily posting limit for this account is reached; try again tomorrow.")
+        _check(st, r, "Checking your TikTok account")
+    return r["data"]
+
+
+def tiktok_post_settings(pc: dict, info: dict) -> dict:
+    """The privacy and interaction settings a Direct Post will use, within what TikTok allows."""
+    tc = pc["tiktok"]
+    if not tc.get("audited"):
+        level, why = "SELF_ONLY", "private until TikTok approves your app"
+    elif not tc.get("privacy"):
+        raise RuntimeError("Choose who can see your TikTok posts first: "
+                           "dakie publish privacy tiktok public|friends|followers|private")
+    else:
+        level, why = TIKTOK_PRIVACY[tc["privacy"]], ""
+    if level not in info.get("privacy_level_options", [level]):
+        raise RuntimeError(f"TikTok doesn't offer '{TIKTOK_PRIVACY_LABEL.get(level, level)}' for this account "
+                           f"(it offers: {', '.join(TIKTOK_PRIVACY_LABEL.get(o, o) for o in info.get('privacy_level_options', []))}).")
+    return {"privacy_level": level, "privacy_note": why,
+            # an interaction the creator turned off in TikTok's own settings stays off
+            "disable_comment": bool(info.get("comment_disabled")) or not tc.get("allow_comment", True),
+            "disable_duet": bool(info.get("duet_disabled")) or not tc.get("allow_duet", True),
+            "disable_stitch": bool(info.get("stitch_disabled")) or not tc.get("allow_stitch", True),
+            "creator": info.get("creator_nickname") or info.get("creator_username"),
+            "username": info.get("creator_username"),
+            "max_duration": info.get("max_video_post_duration_sec")}
+
+
+def _tiktok_send(token: str, endpoint: str, video: bytes, post_info: dict | None) -> str:
     size = len(video)
     chunk = size if size <= 64_000_000 else 10_000_000
     total = 1 if chunk == size else size // chunk
-    st, init, _ = _http("POST", BASES["tiktok_api"] + "/v2/post/publish/inbox/video/init/",
-                        headers={"Authorization": f"Bearer {token}"},
-                        body={"source_info": {"source": "FILE_UPLOAD", "video_size": size,
-                                              "chunk_size": chunk, "total_chunk_count": total}})
+    body = {"source_info": {"source": "FILE_UPLOAD", "video_size": size, "chunk_size": chunk, "total_chunk_count": total}}
+    if post_info:
+        body["post_info"] = post_info
+    st, init, _ = _http("POST", BASES["tiktok_api"] + endpoint, headers={"Authorization": f"Bearer {token}"}, body=body)
     _check(st, init, "Starting the TikTok upload")
     data = init["data"]
     for i in range(total):
@@ -427,9 +478,42 @@ def upload_tiktok(item: dict) -> dict:
             "Content-Type": "video/mp4", "Content-Length": str(b - a), "Content-Range": f"bytes {a}-{b - 1}/{size}"})
         if st >= 400:
             raise RuntimeError(f"TikTok upload of part {i + 1}/{total} failed (HTTP {st}).")
-    return {"id": data["publish_id"], "url": "",
-            "note": "In your TikTok inbox now: tap the notification, paste the caption below, choose Everyone, Post.",
-            "caption_to_paste": item["caption"]}
+    return data["publish_id"]
+
+
+def upload_tiktok(item: dict) -> dict:
+    acc = _account("tiktok")
+    token = _tiktok_access(acc)
+    video = Path(item["file"]).read_bytes()
+    if item.get("tiktok_mode", "inbox") == "inbox":
+        pid = _tiktok_send(token, "/v2/post/publish/inbox/video/init/", video, None)
+        return {"id": pid, "url": "",
+                "note": "In your TikTok inbox now: tap the notification, paste the caption below, choose Everyone, Post.",
+                "caption_to_paste": item["caption"]}
+    # Direct Post: re-check the account right before posting (TikTok requires current creator info)
+    s = tiktok_post_settings(publish_config(), tiktok_creator_info())
+    if s["privacy_level"] != item["privacy_level"]:
+        raise RuntimeError("Your TikTok privacy options changed since you approved the plan; make a new plan.")
+    pid = _tiktok_send(token, "/v2/post/publish/video/init/", video, {
+        "title": item["caption"][:2200], "privacy_level": item["privacy_level"],
+        "disable_comment": item["disable_comment"], "disable_duet": item["disable_duet"],
+        "disable_stitch": item["disable_stitch"], "video_cover_timestamp_ms": 1500,
+        "brand_content_toggle": False, "brand_organic_toggle": False})
+    for _ in range(60):                              # processing usually takes 10-60 s
+        time.sleep(5)
+        st, r, _ = _http("POST", BASES["tiktok_api"] + "/v2/post/publish/status/fetch/",
+                         headers={"Authorization": f"Bearer {token}"}, body={"publish_id": pid})
+        d = (r.get("data") or {}) if isinstance(r, dict) else {}
+        if d.get("status") == "PUBLISH_COMPLETE":
+            ids = d.get("publicaly_available_post_id") or []
+            if ids and s.get("username"):
+                return {"id": pid, "url": f"https://www.tiktok.com/@{s['username']}/video/{ids[0]}"}
+            note = ("Posted to your TikTok profile as 'Only me' (TikTok keeps posts private until your app is "
+                    "approved). To make it public: open it in TikTok → ⋯ → Privacy settings → Everyone.")
+            return {"id": pid, "url": "", "note": note}
+        if d.get("status") == "FAILED":
+            raise RuntimeError(f"TikTok couldn't publish the video: {d.get('fail_reason')}")
+    return {"id": pid, "url": "", "note": "TikTok is still processing; it will appear on your profile shortly."}
 
 
 UPLOADERS = {"youtube": upload_youtube, "instagram": upload_instagram,
@@ -452,8 +536,16 @@ def status() -> str:
         on = pc.get(plat, {}).get("enabled")
         rows.append(f"{plat:10} {'ON ' if on and who else 'off'}  {who or 'not connected'}"
                     + (f"  [default: {pc['youtube']['privacy']}]" if plat == "youtube" else "")
-                    + ("  [lands in your TikTok drafts]" if plat == "tiktok" else ""))
+                    + (f"  [{_tiktok_label(pc['tiktok'])}]" if plat == "tiktok" else ""))
     return "\n".join(rows)
+
+
+def _tiktok_label(tc: dict) -> str:
+    if tc.get("mode", "direct") == "inbox":
+        return "lands in your TikTok drafts"
+    if not tc.get("audited"):
+        return "Direct Post, private (Only me) until TikTok approves your app"
+    return f"Direct Post, {tc.get('privacy') or 'choose privacy: dakie publish privacy tiktok …'}"
 
 
 def _connected(plat: str) -> bool:
@@ -489,6 +581,13 @@ def make_plan(proj: Path, clips=None, platforms=None, include_red=False) -> dict
     done = {(e["clip"], e["platform"]) for e in log if e.get("ok")}
     plats = [p for p in (platforms or PLATFORMS) if pc.get(p, {}).get("enabled") and _connected(p)]
     items, skipped = [], []
+    tt = None                                    # TikTok Direct Post settings, checked once per plan
+    if "tiktok" in plats and pc["tiktok"].get("mode", "direct") == "direct":
+        try:
+            tt = tiktok_post_settings(pc, tiktok_creator_info())
+        except RuntimeError as e:
+            plats = [p for p in plats if p != "tiktok"]
+            skipped.append(f"tiktok: {e}")
     for d in sorted(final.glob("clip_*")):
         n = int(d.name.split("_")[1])
         if clips and n not in clips:
@@ -514,6 +613,15 @@ def make_plan(proj: Path, clips=None, platforms=None, include_red=False) -> dict
                 item.update(privacy=pc["youtube"]["privacy"], category_id=pc["youtube"]["category_id"])
             if plat == "instagram":
                 item["share_to_feed"] = pc["instagram"].get("share_to_feed", True)
+            if plat == "tiktok":
+                item["tiktok_mode"] = "direct" if tt else "inbox"
+                if tt:
+                    if tt.get("max_duration") and media_duration(vids[0]) > tt["max_duration"]:
+                        skipped.append(f"clip {n} → tiktok: longer than TikTok allows for this account "
+                                       f"({tt['max_duration']} s)")
+                        continue
+                    item.update({k: tt[k] for k in ("privacy_level", "privacy_note", "disable_comment",
+                                                     "disable_duet", "disable_stitch", "creator")})
             items.append(item)
     body = json.dumps([{k: v for k, v in i.items() if k != "flags"} for i in items], sort_keys=True)
     plan = {"plan_id": hashlib.sha256(body.encode()).hexdigest()[:8], "created": int(time.time()),
@@ -530,10 +638,27 @@ def plan_markdown(plan: dict) -> str:
         out.append("Nothing to upload.")
     for i in plan["items"]:
         head = i.get("title") or i.get("caption", "").splitlines()[0][:80]
-        extra = f" · {i['privacy']}" if i["platform"] == "youtube" else (" · to your drafts" if i["platform"] == "tiktok" else "")
+        extra = ""
+        if i["platform"] == "youtube":
+            extra = f" · {i['privacy']}"
+        elif i["platform"] == "tiktok":
+            if i.get("tiktok_mode") == "direct":
+                extra = (f" · Direct Post to {i.get('creator')} · who can see it: "
+                         f"{TIKTOK_PRIVACY_LABEL[i['privacy_level']]}"
+                         + (f" ({i['privacy_note']})" if i.get("privacy_note") else "")
+                         + " · " + ", ".join(f"{name} {'off' if i[k] else 'on'}" for name, k in
+                                             (("comments", "disable_comment"), ("Duet", "disable_duet"),
+                                              ("Stitch", "disable_stitch"))))
+            else:
+                extra = " · to your drafts"
         out.append(f"- **Clip {i['clip']} → {i['platform']}**{extra}: {head}")
         for f in i["flags"]:
             out.append(f"    - {f}")
+    if any(i.get("tiktok_mode") == "direct" for i in plan["items"]):
+        out += ["", "**TikTok:** the full caption, hashtags and SEO text are posted with each video, not marked "
+                    "as promotional or branded content. By approving this plan you agree to TikTok's "
+                    f"[Music Usage Confirmation]({TIKTOK_MUSIC_URL}). It may take a few minutes for a post to "
+                    "appear on your profile."]
     if plan["skipped"]:
         out += ["", "Skipped:", *[f"- {s}" for s in plan["skipped"]]]
     if plan["not_connected"]:

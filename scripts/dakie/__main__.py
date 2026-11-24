@@ -51,7 +51,7 @@ def main(argv=None):
     p = sub.add_parser("package"); p.add_argument("project"); p.add_argument("n", type=int)
     p = sub.add_parser("keywords"); p.add_argument("phrases", nargs="+")
     p = sub.add_parser("publish", help="upload finished clips to YouTube, Instagram, Facebook, TikTok")
-    p.add_argument("action", choices=["status", "setup", "plan", "run", "enable", "disable", "privacy"])
+    p.add_argument("action", choices=["status", "setup", "plan", "run", "enable", "disable", "privacy", "tiktok"])
     p.add_argument("args", nargs="*")
     p.add_argument("--clips", default=""); p.add_argument("--platforms", default="")
     p.add_argument("--approve"); p.add_argument("--force", action="store_true")
@@ -163,10 +163,33 @@ def main(argv=None):
             pub._set_enabled(a.args[0], a.action == "enable")
             print(pub.status())
         elif a.action == "privacy":
-            if not a.args or a.args[0] not in ("public", "unlisted", "private"):
-                sys.exit("usage: dakie publish privacy public|unlisted|private   (YouTube default)")
+            # dakie publish privacy public|unlisted|private            (YouTube, as before)
+            # dakie publish privacy tiktok public|friends|followers|private
+            usage = ("usage: dakie publish privacy public|unlisted|private   (YouTube)\n"
+                     "       dakie publish privacy tiktok public|friends|followers|private")
+            args = list(a.args)
+            plat = args.pop(0) if args and args[0] in ("youtube", "tiktok") else "youtube"
+            ok = {"youtube": ("public", "unlisted", "private"), "tiktok": tuple(pub.TIKTOK_PRIVACY)}[plat]
+            if not args or args[0] not in ok:
+                sys.exit(usage)
             cfg = json.loads(CONFIG_PATH.read_text())
-            cfg.setdefault("publish", {}).setdefault("youtube", {})["privacy"] = a.args[0]
+            cfg.setdefault("publish", {}).setdefault(plat, {})["privacy"] = args[0]
+            CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+            print(pub.status())
+        elif a.action == "tiktok":
+            # dakie publish tiktok mode direct|inbox | audited yes|no | comments|duet|stitch on|off
+            keys = {"mode": ("mode", {"direct": "direct", "inbox": "inbox"}),
+                    "audited": ("audited", {"yes": True, "no": False}),
+                    "comments": ("allow_comment", {"on": True, "off": False}),
+                    "duet": ("allow_duet", {"on": True, "off": False}),
+                    "stitch": ("allow_stitch", {"on": True, "off": False})}
+            if len(a.args) != 2 or a.args[0] not in keys or a.args[1] not in keys[a.args[0]][1]:
+                sys.exit("usage: dakie publish tiktok mode direct|inbox\n"
+                         "       dakie publish tiktok audited yes|no      (yes only after TikTok approved your app)\n"
+                         "       dakie publish tiktok comments|duet|stitch on|off")
+            key, vals = keys[a.args[0]]
+            cfg = json.loads(CONFIG_PATH.read_text())
+            cfg.setdefault("publish", {}).setdefault("tiktok", {})[key] = vals[a.args[1]]
             CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
             print(pub.status())
         elif a.action == "plan":

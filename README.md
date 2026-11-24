@@ -118,7 +118,7 @@ Layout, fonts, caption color palette, clip length range and Whisper models are s
 ## Uploading automatically (optional, free)
 Connect your own YouTube, Instagram, Facebook and TikTok accounts through each platform's official
 API (free developer apps, no third-party service). After packaging, Claude shows an upload plan and
-**uploads only after you approve it**. TikTok clips land in your drafts for a one-tap post.
+**uploads only after you approve it**. TikTok clips are posted directly with their captions (private until TikTok approves your developer app, then public).
 Step-by-step setup: [references/publishing.md](references/publishing.md).
 
 ```bash
