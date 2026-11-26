@@ -31,6 +31,10 @@ Streams without a webcam get the press video on top and the gameplay below; came
 game on screen) get the press video on top and the streamer's camera below.
 The white title box sits on the seam with the captions just below it (see `references/editing.md`).
 
+**Sister repo:** the same workflow also runs automatically in **Dakie Agent-zee**
+(`~/.claude/skills/dakie-agentzee`, `agentzee start`), where AI agents drive these `dakie` commands with
+approvals. If the user asks to run the daily routine, the agents, or the office, use the dakie-agentzee skill.
+
 ## Phase 0: Setup check
 Run `dakie doctor`. If anything is missing, run `~/.claude/skills/dakie-clips/install.sh` and then
 `dakie doctor` again. Run `dakie press list`: it must show **at least 10 enabled press videos** (one

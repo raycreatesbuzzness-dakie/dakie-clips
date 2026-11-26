@@ -12,6 +12,18 @@ Claude checks the stream's reuse rights, finds and ranks the 20 best moments of 
 **waits for you to pick your top 10**, then edits them and writes clip-specific titles, descriptions
 and hashtags for each platform.
 
+## The Dakie family
+
+Two repos, one workflow:
+
+| Repo | What it is | You use it to… |
+|---|---|---|
+| [**dakie-clips**](https://github.com/raycreatesbuzzness-dakie/dakie-clips) (this repo) | The clipping **engine**: Claude Code skill + `dakie` CLI | Clip one stream by hand: `dakie_clips <url>` |
+| [**dakie-agentzee**](https://github.com/raycreatesbuzzness-dakie/dakie-agentzee) | The **team**: 6 AI agents (Dakie, Lukie, Edith, Poseo, Kodah, Jannet), approvals, BRAIN, reports and a 3D voxel office on localhost that drive this engine | Run the daily workflow (5 streams → 50 clips) on autopilot |
+
+Same steps in both: **research → rights → top 20 → pick 10 → edit → review → SEO → publish → clean up.**
+Agent-zee calls the `dakie` commands below; keep the CLI and the project folder layout compatible when changing either repo.
+
 ## What the videos look like
 - **Top third:** the streamer's webcam, cropped from the stream and filling the width, so their
   reaction is the star
