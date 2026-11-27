@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from . import captions, press, sfx
-from .common import (PRESS_DIR, ffmpeg, load_config, media_duration, read_json, run, ts,
+from .common import (PRESS_DIR, ffmpeg, has_audio, load_config, media_duration, read_json, run, ts,
                      video_size, write_json, ytdlp_base)
 
 SCRIPTS = Path(__file__).resolve().parent.parent
@@ -20,6 +20,19 @@ def clip_dir(proj: Path, n: int) -> Path:
 
 
 # ------------------------------------------------------------------ prepare
+DOWNLOAD_TRIES = 4          # 3 downloads; the last pass only checks the final result
+
+
+def _section_problem(src: Path, want: float) -> str | None:
+    """Why a downloaded section is unusable, or None if it looks complete."""
+    dur = media_duration(src)
+    if dur < max(5.0, 0.8 * want):
+        return f"only {dur:.1f}s of {want:.0f}s"
+    if not has_audio(src):
+        return "no audio"
+    return None
+
+
 def prepare(proj: Path, n: int, start: float, end: float) -> dict:
     cfg = load_config()
     info = read_json(proj / "info.json")
@@ -30,10 +43,26 @@ def prepare(proj: Path, n: int, start: float, end: float) -> dict:
         end = start + need
         print(f"Window extended to {need:.0f}s: {ts(start)} to {ts(end)}", file=sys.stderr)
     src = d / "source.mp4"
-    if not src.exists():
+    want = (min(end, info["duration"]) if info.get("duration") else end) - start
+    for attempt in range(1, DOWNLOAD_TRIES + 1):
+        if src.exists():
+            problem = _section_problem(src, want)
+            if not problem:
+                break
+            # A dropped connection can leave a short or silent file while yt-dlp still exits 0.
+            # Keep it aside (never delete) and download again.
+            bad = d / "source.bad.mp4"
+            src.replace(bad)
+            print(f"clip {n}: source.mp4 is broken ({problem}); moved to {bad.name}", file=sys.stderr)
+        if attempt == DOWNLOAD_TRIES:
+            break
+        print(f"clip {n}: downloading {ts(start)}-{ts(end)} (try {attempt}/{DOWNLOAD_TRIES - 1})", file=sys.stderr)
         run(ytdlp_base(cfg) + ["-f", "bv*[height<=1080][fps<=60]+ba/b[height<=1080]/bv*+ba/b",
                                "--merge-output-format", "mp4", "--download-sections", f"*{start:.2f}-{end:.2f}",
-                               "--force-keyframes-at-cuts", "-o", str(src), info["source_url"]])
+                               "--force-keyframes-at-cuts", "-o", str(src), info["source_url"]], check=False)
+    if not src.exists():
+        sys.exit(f"clip {n}: could not download a complete section {ts(start)}-{ts(end)} after "
+                 f"{DOWNLOAD_TRIES - 1} tries (network problem?). Retry the job when the connection is stable.")
     dur = media_duration(src)
 
     wav = d / "audio16k.wav"

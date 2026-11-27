@@ -192,6 +192,16 @@ def media_duration(path: Path) -> float:
     return int(m[1]) * 3600 + int(m[2]) * 60 + float(m[3]) if m else 0.0
 
 
+def has_audio(path: Path) -> bool:
+    """True when the file has an audio stream that actually decodes (an empty track counts as none)."""
+    out = subprocess.run([ffmpeg(), "-hide_banner", "-nostdin", "-i", str(path), "-map", "0:a:0",
+                          "-t", "3", "-f", "null", "-"], capture_output=True, text=True)
+    if out.returncode != 0:
+        return False
+    times = re.findall(r"time=(\d+):(\d+):(\d+\.\d+)", out.stderr)
+    return bool(times) and any(float(s) + 60 * int(m) + 3600 * int(h) > 0.5 for h, m, s in times)
+
+
 def video_size(path: Path) -> tuple[int, int]:
     out = subprocess.run([ffmpeg(), "-hide_banner", "-i", str(path)], capture_output=True, text=True).stderr
     m = re.search(r"Video: .*?, (\d{3,5})x(\d{3,5})", out)
