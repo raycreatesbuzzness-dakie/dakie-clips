@@ -82,8 +82,10 @@ def download_scan_audio(proj: Path, info: dict, cfg: dict) -> Path:
     raw = proj / "source" / "scan_audio_raw"
     run(ytdlp_base(cfg) + ["-f", "bestaudio[abr<=96]/worstaudio/Audio_Only/worst",
                            "-o", str(raw) + ".%(ext)s", info["source_url"]])
-    src = next(proj.glob("source/scan_audio_raw.*"))
-    run([ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", "-i", src, "-ac", "1", "-ar", "16000", wav])
+    src = next(p for p in proj.glob("source/scan_audio_raw.*") if not p.name.endswith((".part", ".ytdl")))
+    tmp = wav.with_name("scan_audio.tmp.wav")      # write then rename: a killed scan never leaves a half WAV
+    run([ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", "-i", src, "-ac", "1", "-ar", "16000", tmp])
+    tmp.replace(wav)
     src.unlink()
     return wav
 
@@ -232,8 +234,20 @@ def scan(proj: Path) -> None:
 
     print("2/3 audio for loudness + transcript", file=sys.stderr)
     wav = download_scan_audio(proj, info, cfg)
-    loud = loudness_per_second(wav)
-    write_json(proj / "analysis" / "loudness.json", loud)
+    lpath = proj / "analysis" / "loudness.json"
+    loud = None
+    if lpath.exists():                             # resume: reuse a finished loudness pass
+        try:
+            loud = read_json(lpath)
+        except ValueError:
+            loud = None
+        if not isinstance(loud, list) or len(loud) < 0.98 * float(info.get("duration") or 0):
+            loud = None
+    if loud is None:
+        loud = loudness_per_second(wav)
+        tmp = lpath.with_name("loudness.tmp.json")
+        write_json(tmp, loud)
+        tmp.replace(lpath)
 
     print("3/3 transcript", file=sys.stderr)
     tpath = proj / "analysis" / "transcript.json"
